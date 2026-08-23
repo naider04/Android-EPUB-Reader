@@ -1,0 +1,6 @@
+{
+  "name": "EPUB Reader",
+  "description": "An EPUB reader featuring dynamic paginated sheet layout by font size and built-in dictionary lookup support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

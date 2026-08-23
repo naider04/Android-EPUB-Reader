@@ -16,8 +16,8 @@ data class DictionaryEntry(
 )
 
 data class ActiveDictionaryInfo(
-    val id: String = "default",
-    val name: String = "Default Literary English Dictionary",
+    val id: String = "oald10",
+    val name: String = "OALD 10th Edition",
     val wordCount: Int = 0,
     val isCustom: Boolean = false,
     val dateLoaded: Long = System.currentTimeMillis()

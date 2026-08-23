@@ -187,7 +187,7 @@ fun VocabularyScreen(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Tap on any word while reading an EPUB to look up its definition and save it to your vocabulary list.",
+                                    text = "Press and hold any word while reading an EPUB to look up its definition and save it to your vocabulary list.",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center

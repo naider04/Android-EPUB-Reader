@@ -141,7 +141,7 @@ class VocabularyViewModel(application: Application) : AndroidViewModel(applicati
     fun resetToDefaultDictionary() {
         viewModelScope.launch {
             dictionaryService.resetToDefaultDictionary()
-            _uiState.value = _uiState.value.copy(importMessage = "Switched to Default Literary English Dictionary.")
+            _uiState.value = _uiState.value.copy(importMessage = "Switched back to OALD 10th Edition.")
         }
     }
 

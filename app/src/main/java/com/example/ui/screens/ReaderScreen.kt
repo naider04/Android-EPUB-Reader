@@ -226,7 +226,7 @@ fun ReaderScreen(
                     onTocClick = { viewModel.toggleTocSheet() },
                     onBookmarkClick = { viewModel.toggleBookmarkCurrentPage() },
                     onSettingsClick = { viewModel.toggleSettingsSheet() },
-                    onDictionaryClick = { viewModel.lookupWord("read", "") },
+                    onDictionaryClick = { viewModel.openDictionarySheet() },
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
 

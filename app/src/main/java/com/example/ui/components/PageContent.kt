@@ -13,7 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -172,22 +174,26 @@ fun InteractiveWordText(
 ) {
     val annotatedString = remember(text) { buildAnnotatedString { append(text) } }
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val hapticFeedback = LocalHapticFeedback.current
 
     Text(
         text = annotatedString,
         style = style,
         onTextLayout = { layoutResult = it },
         modifier = modifier.pointerInput(text) {
-            detectTapGestures { pos ->
-                val layout = layoutResult ?: return@detectTapGestures
-                val offset = layout.getOffsetForPosition(pos)
-                if (offset in 0 until text.length) {
-                    val word = extractWordAt(text, offset)
-                    if (word.isNotBlank()) {
-                        onWordClick(word)
+            detectTapGestures(
+                onLongPress = { pos ->
+                    val layout = layoutResult ?: return@detectTapGestures
+                    val offset = layout.getOffsetForPosition(pos)
+                    if (offset in 0 until text.length) {
+                        val word = extractWordAt(text, offset)
+                        if (word.isNotBlank()) {
+                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onWordClick(word)
+                        }
                     }
                 }
-            }
+            )
         }
     )
 }

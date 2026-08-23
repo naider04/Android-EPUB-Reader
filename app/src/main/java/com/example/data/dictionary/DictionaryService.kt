@@ -1,6 +1,7 @@
 package com.example.data.dictionary
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.CustomDictionaryEntity
 import com.example.data.model.ActiveDictionaryInfo
@@ -10,9 +11,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.io.InputStream
 import java.util.UUID
 
@@ -21,10 +25,39 @@ class DictionaryService private constructor(private val context: Context) {
     private val db = AppDatabase.getInstance(context)
     private val customDictionaryDao = db.customDictionaryDao()
 
-    private val _activeDictionaryInfo = MutableStateFlow(ActiveDictionaryInfo(wordCount = DefaultDictionaryData.entries.size))
+    companion object {
+        const val DICTIONARY_ID = "oald10"
+        const val DICTIONARY_NAME = "OALD 10th Edition"
+        const val SOURCE_LABEL = "Oxford Advanced Learner's Dictionary (10th Ed.)"
+
+        // The .gz asset is transparently decompressed by AGP when packaged into the APK,
+        // so at runtime it is available as a plain SQLite database file.
+        const val ASSET_DB_PATH = "dictionaries/oald10.db"
+        private const val MAX_EXAMPLES_PER_MEANING = 8
+
+        @Volatile
+        private var INSTANCE: DictionaryService? = null
+
+        fun getInstance(context: Context): DictionaryService {
+            return INSTANCE ?: synchronized(this) {
+                val instance = DictionaryService(context.applicationContext)
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+
+    private val _activeDictionaryInfo = MutableStateFlow(ActiveDictionaryInfo(id = DICTIONARY_ID, name = DICTIONARY_NAME))
     val activeDictionaryInfo: StateFlow<ActiveDictionaryInfo> = _activeDictionaryInfo.asStateFlow()
 
     private var customEntries: MutableMap<String, DictionaryEntry> = mutableMapOf()
+
+    @Volatile
+    private var oaldDb: SQLiteDatabase? = null
+    private val oaldMutex = Mutex()
+
+    private val installDir: File get() = File(context.filesDir, "dictionaries")
+    private val installedFile: File get() = File(installDir, "oald10.db")
 
     suspend fun initialize() = withContext(Dispatchers.IO) {
         val activeCustom = customDictionaryDao.getActiveDictionary()
@@ -42,42 +75,185 @@ class DictionaryService private constructor(private val context: Context) {
                 return@withContext
             }
         }
-        _activeDictionaryInfo.value = ActiveDictionaryInfo(
-            id = "default",
-            name = "Default Literary English Dictionary",
-            wordCount = DefaultDictionaryData.entries.size,
-            isCustom = false
-        )
+        activateOaldDictionary()
     }
 
     suspend fun lookupWord(rawWord: String): DictionaryEntry? = withContext(Dispatchers.Default) {
         val clean = cleanWord(rawWord)
         if (clean.isBlank()) return@withContext null
 
-        // 1. Direct search in custom or default
-        var entry = findEntry(clean)
+        // 1. Custom imported dictionary takes priority when active
+        var entry = findCustom(clean) ?: findCustom(clean.lowercase())
         if (entry != null) return@withContext entry
 
-        // 2. Lowercase search
-        val lower = clean.lowercase()
-        entry = findEntry(lower)
+        // 2. Direct OALD search (normalization handles case, syllable dots, apostrophes)
+        entry = lookupOald(normalizeTerm(clean), maxDepth = 1)
         if (entry != null) return@withContext entry
 
         // 3. Morphological lemmatization & stem search (e.g. plurals, past tense, adverbs, gerunds)
-        val candidates = getWordStems(lower)
-        for (stem in candidates) {
-            entry = findEntry(stem)
-            if (entry != null) return@withContext entry.copy(word = "$clean (root: ${entry.word})")
+        for (stem in getWordStems(clean.lowercase())) {
+            entry = lookupOald(normalizeTerm(stem), maxDepth = 1)
+            if (entry != null) {
+                return@withContext entry.copy(word = "$clean (root: ${entry.word})")
+            }
         }
 
         // 4. If still not found, build a helpful generated dictionary card with definition template
         return@withContext buildFallbackDefinition(clean)
     }
 
-    private fun findEntry(word: String): DictionaryEntry? {
-        val custom = customEntries[word]
-        if (custom != null) return custom
-        return DefaultDictionaryData.entries[word]
+    private fun findCustom(word: String): DictionaryEntry? {
+        return customEntries[word]
+    }
+
+    /**
+     * Looks up a normalized term in the bundled OALD SQLite database.
+     * [maxDepth] limits how many cross-references are followed automatically
+     * (e.g. "took" -> "PAST TENSE OF take").
+     */
+    private suspend fun lookupOald(term: String, maxDepth: Int = 0): DictionaryEntry? {
+        if (term.isBlank() || term.length > 64) return null
+        val json = queryOaldJson(term) ?: return null
+        return parseOaldJson(json, maxDepth)
+    }
+
+    private suspend fun queryOaldJson(term: String): String? {
+        val database = ensureOaldReady() ?: return null
+        return withContext(Dispatchers.IO) {
+            database.rawQuery(
+                """
+                SELECT e.json FROM entries e
+                JOIN words w ON w.headword = e.headword
+                WHERE w.term = ? LIMIT 1
+                """.trimIndent(),
+                arrayOf(term)
+            ).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }
+    }
+
+    /** Copies the gzipped DB from assets into internal storage on first use and opens it read-only. */
+    private suspend fun ensureOaldReady(): SQLiteDatabase? = oaldMutex.withLock {
+        oaldDb?.let { return it }
+        withContext(Dispatchers.IO) {
+            try {
+                if (!installedFile.exists() || installedFile.length() == 0L) {
+                    installDir.mkdirs()
+                    val tmp = File(installDir, "oald10.db.tmp")
+                    context.assets.open(ASSET_DB_PATH).use { input ->
+                        tmp.outputStream().use { out -> input.copyTo(out, DEFAULT_BUFFER_SIZE * 8) }
+                    }
+                    if (installedFile.exists()) installedFile.delete()
+                    if (!tmp.renameTo(installedFile)) {
+                        tmp.copyTo(installedFile, overwrite = true)
+                        tmp.delete()
+                    }
+                }
+                oaldDb?.close()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            runCatching {
+                oaldDb = SQLiteDatabase.openDatabase(
+                    installedFile.absolutePath, null, SQLiteDatabase.OPEN_READONLY
+                )
+            }.onFailure { it.printStackTrace() }
+            oaldDb
+        }
+    }
+
+    /**
+     * Parses the pre-processed entry JSON produced at build time:
+     * {"headword","pronunciation","groups":[{"partOfSpeech","definitions","examples"}],"cross_ref":{"label","base"}}
+     */
+    private suspend fun parseOaldJson(json: String, crossRefDepth: Int): DictionaryEntry? {
+        return try {
+            val obj = JSONObject(json)
+            val headword = obj.optString("headword").ifBlank { return null }
+            val groups = obj.optJSONArray("groups")
+            val meanings = mutableListOf<DictionaryMeaning>()
+
+            if (groups != null) {
+                for (i in 0 until groups.length()) {
+                    val g = groups.optJSONObject(i) ?: continue
+                    val defsArr = g.optJSONArray("definitions") ?: continue
+                    val defs = mutableListOf<String>()
+                    for (d in 0 until defsArr.length()) {
+                        val def = defsArr.optString(d)
+                        if (def.isNotBlank()) defs.add(def)
+                    }
+                    if (defs.isEmpty()) continue
+
+                    val examples = mutableListOf<String>()
+                    g.optJSONArray("examples")?.let { exArr ->
+                        var e = 0
+                        while (e < exArr.length() && examples.size < MAX_EXAMPLES_PER_MEANING) {
+                            val ex = exArr.optString(e)
+                            if (ex.isNotBlank()) examples.add(ex)
+                            e++
+                        }
+                    }
+
+                    meanings.add(
+                        DictionaryMeaning(
+                            partOfSpeech = g.optString("part_of_speech", "").ifBlank { "general" },
+                            definitions = defs,
+                            examples = examples
+                        )
+                    )
+                }
+            }
+
+            // Entries that only exist as inflected forms point at their base word.
+            if (meanings.isEmpty()) {
+                val crossRef = obj.optJSONObject("cross_ref")
+                if (crossRef != null && crossRefDepth > 0) {
+                    val label = crossRef.optString("label", "")
+                    val baseTerm = normalizeTerm(crossRef.optString("base", ""))
+                    if (baseTerm.isNotBlank() && baseTerm != normalizeTerm(headword)) {
+                        lookupOald(baseTerm, maxDepth = crossRefDepth - 1)?.let { base ->
+                            return base.copy(
+                                word = "${base.word} ($label)",
+                                source = base.source
+                            )
+                        }
+                    }
+                    return DictionaryEntry(
+                        word = headword,
+                        phonetic = obj.optString("pronunciation").takeIf { it.isNotBlank() },
+                        meanings = listOf(
+                            DictionaryMeaning(
+                                partOfSpeech = "verb form",
+                                definitions = listOf("$label of \u201C${crossRef.optString("base")}\u201D.")
+                            )
+                        ),
+                        source = SOURCE_LABEL
+                    )
+                }
+                return null
+            }
+
+            DictionaryEntry(
+                word = headword,
+                phonetic = obj.optString("pronunciation").takeIf { it.isNotBlank() },
+                meanings = meanings,
+                origin = obj.optString("origin").takeIf { it.isNotBlank() },
+                source = SOURCE_LABEL
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    /** Mirrors the web reader's strip(): lowercase, drop interpuncts, punctuation -> space. */
+    private fun normalizeTerm(word: String): String {
+        return word.lowercase()
+            .replace("·", "")
+            .replace(Regex("""[“”"'’‘.,;:!?\(\)\[\]{}«»—–\-]+"""), " ")
+            .replace(Regex("""\s+"""), " ")
+            .trim()
     }
 
     private fun cleanWord(word: String): String {
@@ -118,15 +294,14 @@ class DictionaryService private constructor(private val context: Context) {
     }
 
     private fun buildFallbackDefinition(word: String): DictionaryEntry {
-        val capital = word.replaceFirstChar { it.uppercase() }
         return DictionaryEntry(
             word = word,
             phonetic = "/$word/",
             meanings = listOf(
                 DictionaryMeaning(
                     partOfSpeech = "vocabulary",
-                    definitions = listOf("Word recognized in literature context: '$word'."),
-                    examples = listOf("Tap 'Save' to collect '$word' into your vocabulary study list or import a custom JSON dictionary in Settings.")
+                    definitions = listOf("No definition found for '$word' in the dictionary."),
+                    examples = listOf("Tap 'Save' to collect '$word' into your vocabulary study list.")
                 )
             ),
             source = "Reader Vocabulary Engine"
@@ -178,16 +353,29 @@ class DictionaryService private constructor(private val context: Context) {
     suspend fun resetToDefaultDictionary() = withContext(Dispatchers.IO) {
         customDictionaryDao.deactivateAll()
         customEntries.clear()
+        activateOaldDictionary()
+    }
+
+    private suspend fun activateOaldDictionary() {
+        ensureOaldReady()
+        val count = oaldDb?.let { database ->
+            withContext(Dispatchers.IO) {
+                database.rawQuery("SELECT COUNT(*) FROM entries", emptyArray()).use { c ->
+                    if (c.moveToFirst()) c.getInt(0) else 0
+                }
+            }
+        } ?: 0
         _activeDictionaryInfo.value = ActiveDictionaryInfo(
-            id = "default",
-            name = "Default Literary English Dictionary",
-            wordCount = DefaultDictionaryData.entries.size,
-            isCustom = false
+            id = DICTIONARY_ID,
+            name = DICTIONARY_NAME,
+            wordCount = count,
+            isCustom = false,
+            dateLoaded = System.currentTimeMillis()
         )
     }
 
     /**
-     * Supports multiple flexible JSON schemas:
+     * Supports multiple flexible JSON schemas for user-imported dictionaries:
      * 1. Simple Key-Value: {"word": "definition string", ...}
      * 2. Object map: {"word": {"phonetic": "/.../", "definition": "...", "partOfSpeech": "...", "examples": [...]}}
      * 3. Array of objects: [{"word": "...", "definition": "..."}, ...]
@@ -326,18 +514,5 @@ class DictionaryService private constructor(private val context: Context) {
             e.printStackTrace()
         }
         return resultMap
-    }
-
-    companion object {
-        @Volatile
-        private var INSTANCE: DictionaryService? = null
-
-        fun getInstance(context: Context): DictionaryService {
-            return INSTANCE ?: synchronized(this) {
-                val instance = DictionaryService(context.applicationContext)
-                INSTANCE = instance
-                instance
-            }
-        }
     }
 }

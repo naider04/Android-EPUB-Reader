@@ -302,6 +302,10 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun openDictionarySheet() {
+        _uiState.value = _uiState.value.copy(isDictionarySheetVisible = true)
+    }
+
     fun closeDictionarySheet() {
         _uiState.value = _uiState.value.copy(isDictionarySheetVisible = false, selectedDictionaryEntry = null)
     }

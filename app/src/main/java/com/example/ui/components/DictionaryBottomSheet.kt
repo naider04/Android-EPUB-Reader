@@ -272,7 +272,7 @@ fun DictionaryBottomSheet(
                         .height(120.dp)
                 ) {
                     Text(
-                        text = "Tap on any word in the book or type above to look up definitions instantly.",
+                        text = "Press and hold any word in the book, or type above, to look up its definition.",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = textColor.copy(alpha = 0.6f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center

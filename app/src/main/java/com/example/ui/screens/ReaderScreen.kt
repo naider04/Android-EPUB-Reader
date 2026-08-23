@@ -22,6 +22,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.*
 import com.example.ui.viewmodel.ReaderViewModel
+import com.example.util.PronunciationAccent
+import com.example.util.rememberPronunciationPlayer
 import kotlinx.coroutines.launch
 
 @Composable
@@ -35,6 +37,7 @@ fun ReaderScreen(
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val pronunciationPlayer = rememberPronunciationPlayer()
 
     LaunchedEffect(bookId) {
         viewModel.loadBook(bookId)
@@ -52,24 +55,29 @@ fun ReaderScreen(
     val textColor = Color(theme.textColorHex)
 
     val pagerState = rememberPagerState(
-        initialPage = uiState.currentPageIndex,
+        initialPage = 0,
         pageCount = { uiState.pages.size.coerceAtLeast(1) }
     )
 
-    // Sync pager with ViewModel state
-    LaunchedEffect(uiState.currentPageIndex) {
-        if (uiState.currentPageIndex in 0 until pagerState.pageCount &&
+    // Sync ViewModel page to PagerState (initial load, TOC jump, chapter transition)
+    LaunchedEffect(uiState.currentPageIndex, uiState.pages.size) {
+        if (uiState.pages.isNotEmpty() &&
+            uiState.currentPageIndex in uiState.pages.indices &&
             pagerState.currentPage != uiState.currentPageIndex
         ) {
             pagerState.scrollToPage(uiState.currentPageIndex)
         }
     }
 
-    LaunchedEffect(pagerState.currentPage) {
-        if (pagerState.currentPage != uiState.currentPageIndex &&
-            pagerState.currentPage in uiState.pages.indices
-        ) {
-            viewModel.onPageChanged(pagerState.currentPage)
+    // Sync swipe gesture from PagerState to ViewModel
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.settledPage }.collect { settledPage ->
+            if (uiState.pages.isNotEmpty() &&
+                settledPage in uiState.pages.indices &&
+                settledPage != uiState.currentPageIndex
+            ) {
+                viewModel.onPageChanged(settledPage)
+            }
         }
     }
 
@@ -106,30 +114,11 @@ fun ReaderScreen(
                     .fillMaxSize()
                     .pointerInput(Unit) {
                         detectTapGestures(
-                            onTap = { offset ->
-                                val screenWidth = size.width
-                                val tapX = offset.x
-                                when {
-                                    tapX < screenWidth * 0.22f -> {
-                                        // Left tap zone: previous sheet
-                                        if (!viewModel.prevPage() && pagerState.currentPage > 0) {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                                            }
-                                        }
-                                    }
-                                    tapX > screenWidth * 0.78f -> {
-                                        // Right tap zone: next sheet
-                                        if (!viewModel.nextPage() && pagerState.currentPage < pagerState.pageCount - 1) {
-                                            coroutineScope.launch {
-                                                pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                            }
-                                        }
-                                    }
-                                    else -> {
-                                        // Center zone: toggle controls
-                                        viewModel.toggleControls()
-                                    }
+                            onTap = {
+                                if (uiState.activeSelection != null) {
+                                    viewModel.clearSelection()
+                                } else {
+                                    viewModel.toggleControls()
                                 }
                             }
                         )
@@ -156,8 +145,16 @@ fun ReaderScreen(
                                 PageContent(
                                     page = page,
                                     settings = uiState.settings,
-                                    onWordTapped = { word, snippet ->
-                                        viewModel.lookupWord(word, snippet)
+                                    activeSelection = uiState.activeSelection,
+                                    onTextSelected = { selection ->
+                                        viewModel.selectText(selection)
+                                    },
+                                    onTap = {
+                                        if (uiState.activeSelection != null) {
+                                            viewModel.clearSelection()
+                                        } else {
+                                            viewModel.toggleControls()
+                                        }
                                     },
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -217,21 +214,20 @@ fun ReaderScreen(
 
                 // Interactive Overlays: Top Header & Bottom Bar
                 ReaderHeader(
-                    visible = uiState.isControlsVisible,
+                    visible = uiState.isControlsVisible && uiState.activeSelection == null,
                     bookTitle = uiState.book?.title ?: "EPUB Reader",
                     chapterTitle = currentPage?.chapterTitle ?: "Chapter",
                     theme = theme,
                     isBookmarked = uiState.isCurrentPageBookmarked,
                     onBackClick = onBack,
-                    onTocClick = { viewModel.toggleTocSheet() },
+                    onSearchClick = { viewModel.openSearchSheet() },
                     onBookmarkClick = { viewModel.toggleBookmarkCurrentPage() },
                     onSettingsClick = { viewModel.toggleSettingsSheet() },
-                    onDictionaryClick = { viewModel.openDictionarySheet() },
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
 
                 ReaderFooter(
-                    visible = uiState.isControlsVisible,
+                    visible = uiState.isControlsVisible && uiState.activeSelection == null,
                     currentPageIndex = uiState.currentPageIndex,
                     totalPagesInChapter = uiState.totalPagesInChapter,
                     currentChapterIndex = uiState.currentChapterIndex,
@@ -240,7 +236,30 @@ fun ReaderScreen(
                     onPreviousPage = { viewModel.prevPage() },
                     onNextPage = { viewModel.nextPage() },
                     onPageSliderChange = { newPageIndex -> viewModel.onPageChanged(newPageIndex) },
+                    onTocClick = { viewModel.toggleTocSheet() },
                     modifier = Modifier.align(Alignment.BottomCenter)
+                )
+
+                // Floating Text Selection Action Toolbar (Dictionary & Pronounce options)
+                TextSelectionToolbar(
+                    selection = uiState.activeSelection,
+                    theme = theme,
+                    onDictionaryClick = { term, sentence ->
+                        viewModel.lookupWord(term, sentence)
+                    },
+                    onPronounceUkClick = { textToSpeak ->
+                        pronunciationPlayer.speak(textToSpeak, PronunciationAccent.UK)
+                    },
+                    onPronounceUsClick = { textToSpeak ->
+                        pronunciationPlayer.speak(textToSpeak, PronunciationAccent.US)
+                    },
+                    onDismiss = {
+                        viewModel.clearSelection()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 16.dp)
                 )
 
                 // Snackbar Host
@@ -248,11 +267,24 @@ fun ReaderScreen(
                     hostState = snackbarHostState,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = 64.dp)
+                        .padding(bottom = if (uiState.activeSelection != null) 140.dp else 64.dp)
                 )
             }
 
             // Bottom Sheets
+            if (uiState.isSearchSheetVisible) {
+                BookSearchSheet(
+                    query = uiState.searchQuery,
+                    results = uiState.searchResults,
+                    isSearching = uiState.isSearching,
+                    theme = theme,
+                    onQueryChange = { viewModel.updateSearchQuery(it) },
+                    onSearch = { viewModel.searchBook(it) },
+                    onSelectResult = { viewModel.selectSearchResult(it) },
+                    onDismiss = { viewModel.closeSearchSheet() }
+                )
+            }
+
             if (uiState.isSettingsSheetVisible) {
                 ReaderSettingsSheet(
                     settings = uiState.settings,

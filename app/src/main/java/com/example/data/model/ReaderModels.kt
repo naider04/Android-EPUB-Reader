@@ -79,3 +79,21 @@ data class EpubBook(
     val isAsset: Boolean = false,
     val fileUriString: String? = null
 )
+
+data class TextSelection(
+    val blockIndex: Int,
+    val selectedText: String,
+    val startOffset: Int,
+    val endOffset: Int,
+    val sentenceContext: String = ""
+)
+
+data class BookSearchResult(
+    val id: String,
+    val chapterIndex: Int,
+    val chapterTitle: String,
+    val snippet: String,
+    val query: String,
+    val charOffset: Int
+)
+

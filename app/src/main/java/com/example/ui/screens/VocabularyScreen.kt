@@ -1,8 +1,5 @@
 package com.example.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,13 +21,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.local.entity.VocabularyEntity
+import com.example.ui.components.VoiceSettingsDialog
 import com.example.ui.viewmodel.VocabularyViewModel
+import com.example.util.PronunciationAccent
+import com.example.util.rememberPronunciationPlayer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,18 +44,19 @@ fun VocabularyScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var selectedTab by remember { mutableIntStateOf(0) }
-
-    val jsonPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.importDictionaryFromUri(it) }
-    }
+    var showVoiceSettingsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.importMessage) {
         uiState.importMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
             viewModel.clearImportMessage()
         }
+    }
+
+    if (showVoiceSettingsDialog) {
+        VoiceSettingsDialog(
+            onDismiss = { showVoiceSettingsDialog = false }
+        )
     }
 
     Scaffold(
@@ -88,10 +89,13 @@ fun VocabularyScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.showCustomJsonDialog(true) }) {
+                    IconButton(
+                        onClick = { showVoiceSettingsDialog = true },
+                        modifier = Modifier.testTag("voice_settings_button")
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.Code,
-                            contentDescription = "Paste Custom JSON"
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Pronunciation Voice Settings"
                         )
                     }
                 },
@@ -129,7 +133,7 @@ fun VocabularyScreen(
                     onClick = { selectedTab = 1 },
                     text = {
                         Text(
-                            "Dictionary & JSON Setup",
+                            "Dictionary",
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
                         )
                     }
@@ -187,7 +191,7 @@ fun VocabularyScreen(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Press and hold any word while reading an EPUB to look up its definition and save it to your vocabulary list.",
+                                    text = "Press and hold any word while reading an EPUB to look up its definition in the Oxford Advanced Learner's Dictionary.",
                                     style = MaterialTheme.typography.bodyMedium.copy(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -211,13 +215,15 @@ fun VocabularyScreen(
                     }
                 }
             } else {
-                // Tab 1: Dictionary Search & Custom JSON Management
+                // Tab 1: Oxford Advanced Learner's Dictionary
+                val pronunciationPlayer = rememberPronunciationPlayer()
+
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    // Active Dictionary Card
+                    // Active Built-in Oxford Dictionary Card
                     item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
@@ -241,7 +247,7 @@ fun VocabularyScreen(
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "Active Dictionary",
+                                            text = "Integrated Dictionary",
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                         )
                                     }
@@ -251,7 +257,7 @@ fun VocabularyScreen(
                                         shape = RoundedCornerShape(12.dp)
                                     ) {
                                         Text(
-                                            text = if (activeDictInfo.isCustom) "CUSTOM JSON" else "BUILT-IN",
+                                            text = "OALD 10th ED",
                                             color = MaterialTheme.colorScheme.onPrimary,
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
@@ -262,46 +268,37 @@ fun VocabularyScreen(
 
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Text(
-                                    text = activeDictInfo.name,
+                                    text = "Oxford Advanced Learner's Dictionary",
                                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
                                 )
                                 Text(
-                                    text = "${activeDictInfo.wordCount} vocabulary entries ready for instant in-reader lookup",
+                                    text = "65,000+ comprehensive definitions, phonetics, idioms, and UK/US pronunciations installed offline.",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 )
 
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = {
-                                            jsonPickerLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { showVoiceSettingsDialog = true },
                                         shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                     ) {
-                                        Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Import JSON File", fontSize = 12.sp)
-                                    }
-
-                                    if (activeDictInfo.isCustom) {
-                                        OutlinedButton(
-                                            onClick = { viewModel.resetToDefaultDictionary() },
-                                            shape = RoundedCornerShape(10.dp),
-                                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
-                                        ) {
-                                            Text("Reset to Default", fontSize = 12.sp)
-                                        }
+                                        Text("Voice Source Settings", fontSize = 12.sp)
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Dictionary Search Test
+                    // Dictionary Search Card
                     item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
@@ -309,7 +306,7 @@ fun VocabularyScreen(
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(
-                                    text = "Search Active Dictionary",
+                                    text = "Search Oxford Dictionary",
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -317,8 +314,15 @@ fun VocabularyScreen(
                                 OutlinedTextField(
                                     value = uiState.dictionarySearchQuery,
                                     onValueChange = { viewModel.updateDictionarySearchQuery(it) },
-                                    placeholder = { Text("Type any word (e.g. ephemeral, stratagem)...") },
+                                    placeholder = { Text("Type any word (e.g. ephemeral, stratagem, serendipity)...") },
                                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                                    trailingIcon = {
+                                        if (uiState.dictionarySearchQuery.isNotBlank()) {
+                                            IconButton(onClick = { viewModel.updateDictionarySearchQuery("") }) {
+                                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                            }
+                                        }
+                                    },
                                     singleLine = true,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth()
@@ -339,13 +343,13 @@ fun VocabularyScreen(
                                         shape = RoundedCornerShape(12.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
+                                        Column(modifier = Modifier.padding(14.dp)) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
-                                                Column {
+                                                Column(modifier = Modifier.weight(1f)) {
                                                     Text(
                                                         text = entry.word,
                                                         style = MaterialTheme.typography.titleMedium.copy(
@@ -364,137 +368,108 @@ fun VocabularyScreen(
                                                     }
                                                 }
 
-                                                IconButton(onClick = { viewModel.saveEntryToVocabulary(entry) }) {
-                                                    Icon(
-                                                        Icons.Default.BookmarkAdd,
-                                                        contentDescription = "Save to vocabulary",
-                                                        tint = MaterialTheme.colorScheme.primary
-                                                    )
+                                                // Pronunciation buttons for UK and US
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    FilledTonalButton(
+                                                        onClick = { pronunciationPlayer.speak(entry.word, PronunciationAccent.UK) },
+                                                        shape = RoundedCornerShape(12.dp),
+                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                        modifier = Modifier.height(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                                            contentDescription = "UK Pronunciation",
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text(text = "UK", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+
+                                                    FilledTonalButton(
+                                                        onClick = { pronunciationPlayer.speak(entry.word, PronunciationAccent.US) },
+                                                        shape = RoundedCornerShape(12.dp),
+                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                        modifier = Modifier.height(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                                            contentDescription = "US Pronunciation",
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text(text = "US", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
                                             }
 
-                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Spacer(modifier = Modifier.height(10.dp))
                                             entry.meanings.forEach { m ->
-                                                Text(
-                                                    text = "[${m.partOfSpeech}] ${m.definitions.joinToString("; ")}",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp)
-                                                )
-                                                if (m.examples.isNotEmpty()) {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    modifier = Modifier.padding(bottom = 4.dp)
+                                                ) {
                                                     Text(
-                                                        text = "• \"${m.examples.first()}\"",
-                                                        style = MaterialTheme.typography.bodySmall.copy(
-                                                            fontStyle = FontStyle.Italic,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        text = m.partOfSpeech.uppercase(),
+                                                        style = MaterialTheme.typography.labelSmall.copy(
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 10.sp
                                                         ),
-                                                        modifier = Modifier.padding(start = 8.dp, top = 2.dp)
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                     )
+                                                }
+
+                                                m.definitions.forEachIndexed { idx, def ->
+                                                    Text(
+                                                        text = "${idx + 1}. $def",
+                                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                                            fontSize = 13.sp,
+                                                            lineHeight = 18.sp
+                                                        ),
+                                                        modifier = Modifier.padding(vertical = 2.dp)
+                                                    )
+                                                }
+
+                                                if (m.examples.isNotEmpty()) {
+                                                    m.examples.take(2).forEach { ex ->
+                                                        Text(
+                                                            text = "• \"$ex\"",
+                                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                                fontStyle = FontStyle.Italic,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            ),
+                                                            modifier = Modifier.padding(start = 8.dp, top = 2.dp, bottom = 4.dp)
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
                                     }
-                                }
-                            }
-                        }
-                    }
-
-                    // JSON Format Guide Card
-                    item {
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
+                                } else if (uiState.dictionarySearchQuery.isBlank()) {
                                     Text(
-                                        text = "Custom JSON Format Support",
-                                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                                        text = "Search across 65,000+ Oxford dictionary entries with British and American audio pronunciations.",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                } else {
+                                    Text(
+                                        text = "No definition found for '${uiState.dictionarySearchQuery}'.",
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "The app accepts simple key-values or rich dictionary schemas:\n\n" +
-                                        "• Key-Value: {\"word\": \"definition\"}\n" +
-                                        "• Structured: {\"word\": {\"phonetic\": \"/…/\", \"partOfSpeech\": \"noun\", \"definition\": \"…\", \"examples\": [\"…\"]}}\n" +
-                                        "• Array Format: [{\"word\": \"…\", \"meanings\": [{\"partOfSpeech\": \"…\", \"definitions\": [\"…\"]}]}]",
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
-                                        fontSize = 12.sp,
-                                        lineHeight = 18.sp
-                                    )
-                                )
                             }
                         }
                     }
                 }
             }
         }
-    }
-
-    // Paste Custom JSON Dialog
-    if (uiState.showCustomJsonDialog) {
-        var nameInput by remember { mutableStateOf("Custom Dictionary") }
-        var jsonInput by remember {
-            mutableStateOf(
-                """{
-  "ubiquitous": {
-    "phonetic": "/juːˈbɪk.wɪ.təs/",
-    "partOfSpeech": "adjective",
-    "definition": "Present, appearing, or found everywhere.",
-    "examples": ["Smartphones have become ubiquitous in daily life."]
-  },
-  "ephemeral": "Lasting for a very short time."
-}"""
-            )
-        }
-
-        AlertDialog(
-            onDismissRequest = { viewModel.showCustomJsonDialog(false) },
-            title = { Text("Paste Custom Dictionary JSON") },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = nameInput,
-                        onValueChange = { nameInput = it },
-                        label = { Text("Dictionary Name") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = jsonInput,
-                        onValueChange = { jsonInput = it },
-                        label = { Text("JSON Content") },
-                        minLines = 6,
-                        maxLines = 10,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.importDictionaryFromJsonString(jsonInput, nameInput)
-                    }
-                ) {
-                    Text("Install Dictionary")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.showCustomJsonDialog(false) }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }
 
@@ -505,12 +480,14 @@ fun VocabularyCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val pronunciationPlayer = rememberPronunciationPlayer()
+
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (item.isLearned) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (item.isLearned) 0.dp else 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -519,28 +496,59 @@ fun VocabularyCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.word,
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = FontFamily.Serif,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            fontFamily = FontFamily.Serif
                         )
                     )
                     if (!item.phonetic.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = item.phonetic,
                             style = MaterialTheme.typography.bodySmall.copy(
-                                fontStyle = FontStyle.Italic,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                fontStyle = FontStyle.Italic
                             )
                         )
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = { pronunciationPlayer.speak(item.word, PronunciationAccent.UK) },
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = "UK Pronunciation",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(text = "UK", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    FilledTonalButton(
+                        onClick = { pronunciationPlayer.speak(item.word, PronunciationAccent.US) },
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                            contentDescription = "US Pronunciation",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(text = "US", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
                     IconButton(
                         onClick = onToggleLearned,
                         modifier = Modifier.size(36.dp)

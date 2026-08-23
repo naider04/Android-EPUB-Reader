@@ -5,7 +5,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -13,11 +16,43 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ReaderTheme
+
+/**
+ * Custom icon displaying horizontal "iii" (three parallel vertical bars side-by-side).
+ */
+@Composable
+fun HorizontalIiiIcon(
+    tint: Color,
+    modifier: Modifier = Modifier.size(20.dp)
+) {
+    Canvas(modifier = modifier) {
+        val strokeWidth = 2.4.dp.toPx()
+        val barHeight = size.height * 0.58f
+        val startY = (size.height - barHeight) / 2f
+        val endY = startY + barHeight
+        val step = size.width / 4f
+
+        for (i in 1..3) {
+            val x = step * i
+            drawLine(
+                color = tint,
+                start = Offset(x, startY),
+                end = Offset(x, endY),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
 
 @Composable
 fun ReaderFooter(
@@ -30,6 +65,7 @@ fun ReaderFooter(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onPageSliderChange: (Int) -> Unit,
+    onTocClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val barBg = Color(theme.surfaceColorHex).copy(alpha = 0.95f)
@@ -101,29 +137,54 @@ fun ReaderFooter(
                     }
                 }
 
-                // Info label
+                // Info & Actions Row (Chapters button with horizontal 'iii' + Sheet progress)
                 Row(
                     horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp)
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
                 ) {
-                    Text(
-                        text = "Chapter ${currentChapterIndex + 1} of $totalChapters",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            color = contentColor.copy(alpha = 0.7f),
-                            fontSize = 12.sp
-                        )
-                    )
+                    // Chapters button with horizontal "iii" icon
+                    Surface(
+                        color = accentColor.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onTocClick)
+                            .testTag("footer_chapters_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            HorizontalIiiIcon(
+                                tint = accentColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Chapter ${currentChapterIndex + 1} of $totalChapters",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = contentColor,
+                                    fontSize = 12.sp
+                                )
+                            )
+                        }
+                    }
+
                     Text(
                         text = "Sheet $pageNumber of $totalPages",
                         style = MaterialTheme.typography.labelMedium.copy(
                             color = contentColor,
                             fontSize = 12.sp
-                        )
+                        ),
+                        modifier = Modifier.padding(end = 4.dp)
                     )
                 }
             }
         }
     }
 }
+

@@ -20,18 +20,35 @@ import java.util.zip.ZipInputStream
 
 class EpubParser(private val context: Context) {
 
-    suspend fun parseFromUri(uri: Uri): Result<EpubBook> = withContext(Dispatchers.IO) {
+    suspend fun parseFromFile(file: File, bookId: String? = null): Result<EpubBook> = withContext(Dispatchers.IO) {
         try {
-            val inputStream = context.contentResolver.openInputStream(uri)
-                ?: return@withContext Result.failure(Exception("Cannot open file stream"))
-            val bytes = inputStream.use { it.readBytes() }
-            parseFromBytes(bytes, uri.lastPathSegment ?: "Imported Book", uri.toString())
+            if (!file.exists() || file.length() == 0L) {
+                return@withContext Result.failure(Exception("File does not exist or is empty"))
+            }
+            val bytes = file.readBytes()
+            parseFromBytes(bytes, file.nameWithoutExtension, file.absolutePath, bookId)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
-    suspend fun parseFromBytes(bytes: ByteArray, defaultTitle: String, uriString: String? = null): Result<EpubBook> = withContext(Dispatchers.IO) {
+    suspend fun parseFromUri(uri: Uri, bookId: String? = null): Result<EpubBook> = withContext(Dispatchers.IO) {
+        try {
+            val inputStream = context.contentResolver.openInputStream(uri)
+                ?: return@withContext Result.failure(Exception("Cannot open file stream"))
+            val bytes = inputStream.use { it.readBytes() }
+            parseFromBytes(bytes, uri.lastPathSegment ?: "Imported Book", uri.toString(), bookId)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun parseFromBytes(
+        bytes: ByteArray,
+        defaultTitle: String,
+        uriString: String? = null,
+        bookId: String? = null
+    ): Result<EpubBook> = withContext(Dispatchers.IO) {
         try {
             val entriesMap = mutableMapOf<String, ByteArray>()
             ZipInputStream(ByteArrayInputStream(bytes)).use { zis ->
@@ -68,6 +85,8 @@ class EpubParser(private val context: Context) {
             val manifest = parseOpfManifest(opfContent)
             val spine = parseOpfSpine(opfContent)
 
+            val resolvedBookId = bookId ?: "epub_${UUID.randomUUID().toString().take(12)}"
+
             // Extract cover if available
             var coverFilePath: String? = null
             val coverItemHref = manifest[metadata.coverId] ?: manifest["cover-image"] ?: manifest["cover"]
@@ -77,7 +96,8 @@ class EpubParser(private val context: Context) {
                     ?: entriesMap.entries.firstOrNull { it.key.endsWith(File(coverItemHref).name) }?.value
                 if (coverBytes != null) {
                     try {
-                        val coverFile = File(context.cacheDir, "cover_${UUID.randomUUID()}.jpg")
+                        val coversDir = File(context.filesDir, "covers").apply { mkdirs() }
+                        val coverFile = File(coversDir, "cover_${resolvedBookId}.jpg")
                         FileOutputStream(coverFile).use { it.write(coverBytes) }
                         coverFilePath = coverFile.absolutePath
                     } catch (_: Exception) {}
@@ -118,7 +138,7 @@ class EpubParser(private val context: Context) {
             }
 
             val book = EpubBook(
-                id = UUID.randomUUID().toString(),
+                id = resolvedBookId,
                 title = metadata.title.ifBlank { defaultTitle },
                 author = metadata.author.ifBlank { "Unknown Author" },
                 description = metadata.description,

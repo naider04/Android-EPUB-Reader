@@ -9,8 +9,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,6 +35,14 @@ fun ReaderSettingsSheet(
     onSettingsChanged: ((ReaderSettings) -> ReaderSettings) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var showVoiceSettingsDialog by remember { mutableStateOf(false) }
+
+    if (showVoiceSettingsDialog) {
+        VoiceSettingsDialog(
+            onDismiss = { showVoiceSettingsDialog = false }
+        )
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -65,7 +75,7 @@ fun ReaderSettingsSheet(
                         modifier = Modifier.padding(end = 8.dp)
                     )
                     Text(
-                        text = "Sheet & Typography Layout",
+                        text = "Sheet & Reader Settings",
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold,
                             color = textColor
@@ -270,9 +280,60 @@ fun ReaderSettingsSheet(
                 }
             }
 
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 5. Voice Source Settings Button
+            Surface(
+                color = accentColor.copy(alpha = 0.1f),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { showVoiceSettingsDialog = true }
+                    .testTag("open_voice_settings_from_reader")
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.RecordVoiceOver,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Pronunciation Voice Settings",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = textColor
+                                )
+                            )
+                            Text(
+                                text = "Change audio engine for UK & US voices",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 11.sp,
+                                    color = textColor.copy(alpha = 0.7f)
+                                )
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Configure Voice",
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 5. Toggles
+            // 6. Header/Footer Toggle
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,

@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.components.BookCoverCard
+import com.example.ui.components.VoiceSettingsDialog
 import com.example.ui.viewmodel.LibraryViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +50,7 @@ fun LibraryScreen(
     val vocabCount by viewModel.vocabularyCount.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showVoiceSettingsDialog by remember { mutableStateOf(false) }
 
     val epubPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -60,6 +63,12 @@ fun LibraryScreen(
             snackbarHostState.showSnackbar(message)
             viewModel.clearImportMessage()
         }
+    }
+
+    if (showVoiceSettingsDialog) {
+        VoiceSettingsDialog(
+            onDismiss = { showVoiceSettingsDialog = false }
+        )
     }
 
     Scaffold(
@@ -126,7 +135,7 @@ fun LibraryScreen(
                                     )
                                 )
                                 Text(
-                                    text = "Paginated sheets & Dictionary",
+                                    text = "Oxford Dictionary & Paginated Sheets",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                                     )
@@ -134,32 +143,50 @@ fun LibraryScreen(
                             }
                         }
 
-                        // Vocabulary & Dictionary Badge button
-                        Surface(
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            shape = RoundedCornerShape(20.dp),
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .clickable { onOpenVocabulary() }
-                                .testTag("vocab_button")
+                        // Top Action Buttons (Dictionary + Settings)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            // Vocabulary & Dictionary Badge button
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(20.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .clickable { onOpenVocabulary() }
+                                    .testTag("vocab_button")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Translate,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (vocabCount > 0) "$vocabCount Words" else "Dictionary",
+                                        style = MaterialTheme.typography.labelMedium.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    )
+                                }
+                            }
+
+                            // Settings Button
+                            IconButton(
+                                onClick = { showVoiceSettingsDialog = true },
+                                modifier = Modifier.testTag("library_settings_button")
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Translate,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (vocabCount > 0) "$vocabCount Words" else "Dictionary",
-                                    style = MaterialTheme.typography.labelMedium.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Voice & App Settings",
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                         }
@@ -188,13 +215,13 @@ fun LibraryScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Font-Measured Pagination",
+                                    text = "Oxford Advanced Learner's Dictionary (10th Ed.)",
                                     style = MaterialTheme.typography.titleSmall.copy(
                                         fontWeight = FontWeight.Bold
                                     )
                                 )
                                 Text(
-                                    text = "Tap any word while reading for instant definition & study cards. Sheets adapt cleanly to font size.",
+                                    text = "Select or long-press any word in book sheets for Oxford definitions and UK/US native audio pronunciation.",
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontSize = 12.sp

@@ -3,20 +3,15 @@ package com.example.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkAdd
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -26,23 +21,27 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.DictionaryEntry
 import com.example.data.model.ReaderTheme
+import com.example.util.PronunciationAccent
+import com.example.util.rememberPronunciationPlayer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DictionaryBottomSheet(
     entry: DictionaryEntry?,
     isLoading: Boolean,
-    isSavedInVocabulary: Boolean,
     theme: ReaderTheme,
     contextSnippet: String = "",
-    onSaveToVocabulary: () -> Unit,
     onSearchWord: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    // Optional parameter for backwards compatibility if referenced
+    isSavedInVocabulary: Boolean = false,
+    onSaveToVocabulary: () -> Unit = {}
 ) {
     var searchInput by remember { mutableStateOf("") }
     val textColor = Color(theme.textColorHex)
     val accentColor = Color(theme.accentColorHex)
     val surfaceColor = Color(theme.surfaceColorHex)
+    val pronunciationPlayer = rememberPronunciationPlayer()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -112,7 +111,7 @@ fun DictionaryBottomSheet(
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState())
                 ) {
-                    // Word & Phonetics Header
+                    // Word, Phonetics & Pronunciation Audio Buttons Header
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -139,30 +138,66 @@ fun DictionaryBottomSheet(
                             }
                         }
 
-                        // Save to Vocabulary button
-                        Button(
-                            onClick = onSaveToVocabulary,
-                            enabled = !isSavedInVocabulary,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSavedInVocabulary) accentColor.copy(alpha = 0.2f) else accentColor,
-                                contentColor = if (isSavedInVocabulary) accentColor else Color.White
-                            ),
-                            shape = RoundedCornerShape(20.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            modifier = Modifier.testTag("dict_save_vocab_button")
+                        // Pronunciation Buttons: UK and US
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = if (isSavedInVocabulary) Icons.Default.Check else Icons.Default.BookmarkAdd,
-                                contentDescription = null,
+                            // UK Pronunciation Button
+                            FilledTonalButton(
+                                onClick = {
+                                    pronunciationPlayer.speak(entry.word, PronunciationAccent.UK)
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = accentColor.copy(alpha = 0.14f),
+                                    contentColor = accentColor
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                 modifier = Modifier
-                                    .size(16.dp)
-                                    .padding(end = 4.dp)
-                            )
-                            Text(
-                                text = if (isSavedInVocabulary) "Saved" else "Save Word",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                                    .height(36.dp)
+                                    .testTag("pronounce_uk_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = "UK Pronunciation",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "UK",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            // US Pronunciation Button
+                            FilledTonalButton(
+                                onClick = {
+                                    pronunciationPlayer.speak(entry.word, PronunciationAccent.US)
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = accentColor.copy(alpha = 0.14f),
+                                    contentColor = accentColor
+                                ),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .height(36.dp)
+                                    .testTag("pronounce_us_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                    contentDescription = "US Pronunciation",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "US",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 

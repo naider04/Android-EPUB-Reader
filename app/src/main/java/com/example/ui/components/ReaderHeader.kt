@@ -9,11 +9,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.FormatSize
-import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,10 +33,9 @@ fun ReaderHeader(
     theme: ReaderTheme,
     isBookmarked: Boolean,
     onBackClick: () -> Unit,
-    onTocClick: () -> Unit,
+    onSearchClick: () -> Unit,
     onBookmarkClick: () -> Unit,
     onSettingsClick: () -> Unit,
-    onDictionaryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val barBg = Color(theme.surfaceColorHex).copy(alpha = 0.95f)
@@ -116,23 +114,12 @@ fun ReaderHeader(
                         }
 
                         IconButton(
-                            onClick = onTocClick,
-                            modifier = Modifier.testTag("reader_toc_button")
+                            onClick = onSearchClick,
+                            modifier = Modifier.testTag("reader_search_button")
                         ) {
                             Icon(
-                                imageVector = Icons.AutoMirrored.Filled.MenuBook,
-                                contentDescription = "Table of Contents",
-                                tint = contentColor
-                            )
-                        }
-
-                        IconButton(
-                            onClick = onDictionaryClick,
-                            modifier = Modifier.testTag("reader_dict_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Translate,
-                                contentDescription = "Dictionary",
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search Book",
                                 tint = contentColor
                             )
                         }
@@ -153,3 +140,4 @@ fun ReaderHeader(
         }
     }
 }
+

@@ -12,6 +12,7 @@ import com.example.data.model.EpubBook
 import com.example.data.model.ReaderSettings
 import com.example.data.repository.BookRepository
 import com.example.data.repository.VocabularyRepository
+import com.example.data.model.TextSelection
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,8 +30,13 @@ data class ReaderUiState(
     val isSettingsSheetVisible: Boolean = false,
     val isTocSheetVisible: Boolean = false,
     val isBookmarksSheetVisible: Boolean = false,
+    val isSearchSheetVisible: Boolean = false,
+    val searchQuery: String = "",
+    val searchResults: List<com.example.data.model.BookSearchResult> = emptyList(),
+    val isSearching: Boolean = false,
     val isCurrentPageBookmarked: Boolean = false,
     val bookmarks: List<BookmarkEntity> = emptyList(),
+    val activeSelection: TextSelection? = null,
     val selectedDictionaryEntry: DictionaryEntry? = null,
     val lookupWordContext: String = "",
     val isWordSavedInVocabulary: Boolean = false,
@@ -52,6 +58,9 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private var currentViewportHeightPx: Int = 0
     private var currentDensity: Float = 2.5f
 
+    private var pendingRestoredPageIndex: Int? = null
+    private var pendingRestoredCharOffset: Int? = null
+
     init {
         viewModelScope.launch {
             dictionaryService.initialize()
@@ -67,6 +76,10 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             if (book != null) {
                 val initialChapterIndex = bookEntity?.currentChapterIndex ?: 0
                 val initialPageIndex = bookEntity?.currentPageInChapter ?: 0
+                val initialCharOffset = bookEntity?.currentCharacterOffset ?: 0
+
+                pendingRestoredPageIndex = initialPageIndex
+                pendingRestoredCharOffset = initialCharOffset
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -114,7 +127,11 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         val chapterIndex = state.currentChapterIndex.coerceIn(0, book.chapters.size - 1)
         val chapter = book.chapters[chapterIndex]
 
-        val currentCharOffset = state.pages.getOrNull(state.currentPageIndex)?.characterStartOffset ?: 0
+        val currentCharOffset = if (pendingRestoredCharOffset != null && pendingRestoredCharOffset!! > 0) {
+            pendingRestoredCharOffset!!
+        } else {
+            state.pages.getOrNull(state.currentPageIndex)?.characterStartOffset ?: 0
+        }
 
         val newPages = EpubPaginator.paginateChapter(
             chapter = chapter,
@@ -125,8 +142,25 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             settings = state.settings
         )
 
-        val newPageIndex = EpubPaginator.findMatchingPage(newPages, currentCharOffset)
-            .coerceIn(0, (newPages.size - 1).coerceAtLeast(0))
+        val newPageIndex = when {
+            pendingRestoredCharOffset != null && pendingRestoredCharOffset!! > 0 -> {
+                EpubPaginator.findMatchingPage(newPages, pendingRestoredCharOffset!!)
+                    .coerceIn(0, (newPages.size - 1).coerceAtLeast(0))
+            }
+            pendingRestoredPageIndex != null -> {
+                pendingRestoredPageIndex!!.coerceIn(0, (newPages.size - 1).coerceAtLeast(0))
+            }
+            newPages.isNotEmpty() -> {
+                EpubPaginator.findMatchingPage(newPages, currentCharOffset)
+                    .coerceIn(0, (newPages.size - 1).coerceAtLeast(0))
+            }
+            else -> 0
+        }
+
+        if (currentViewportWidthPx > 100 && newPages.isNotEmpty()) {
+            pendingRestoredPageIndex = null
+            pendingRestoredCharOffset = null
+        }
 
         _uiState.value = _uiState.value.copy(
             pages = newPages,
@@ -141,7 +175,10 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun onPageChanged(pageIndex: Int) {
         val state = _uiState.value
         if (pageIndex in state.pages.indices && pageIndex != state.currentPageIndex) {
-            _uiState.value = _uiState.value.copy(currentPageIndex = pageIndex)
+            _uiState.value = _uiState.value.copy(
+                currentPageIndex = pageIndex,
+                activeSelection = null
+            )
             checkIfCurrentPageIsBookmarked()
             saveReadingProgress()
         }
@@ -149,6 +186,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
 
     fun nextPage(): Boolean {
         val state = _uiState.value
+        clearSelection()
         if (state.currentPageIndex < state.pages.size - 1) {
             onPageChanged(state.currentPageIndex + 1)
             return true
@@ -162,6 +200,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
 
     fun prevPage(): Boolean {
         val state = _uiState.value
+        clearSelection()
         if (state.currentPageIndex > 0) {
             onPageChanged(state.currentPageIndex - 1)
             return true
@@ -194,7 +233,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                 pages = newPages,
                 totalPagesInChapter = newPages.size,
                 isTocSheetVisible = false,
-                isBookmarksSheetVisible = false
+                isBookmarksSheetVisible = false,
+                activeSelection = null
             )
 
             checkIfCurrentPageIsBookmarked()
@@ -211,15 +251,97 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             isControlsVisible = false,
             isSettingsSheetVisible = false,
             isTocSheetVisible = false,
+            isBookmarksSheetVisible = false,
+            isSearchSheetVisible = false
+        )
+    }
+
+    fun openSearchSheet() {
+        _uiState.value = _uiState.value.copy(
+            isSearchSheetVisible = true,
+            isSettingsSheetVisible = false,
+            isTocSheetVisible = false,
             isBookmarksSheetVisible = false
         )
+    }
+
+    fun closeSearchSheet() {
+        _uiState.value = _uiState.value.copy(isSearchSheetVisible = false)
+    }
+
+    fun updateSearchQuery(query: String) {
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+    }
+
+    fun searchBook(query: String) {
+        val trimmed = query.trim()
+        _uiState.value = _uiState.value.copy(searchQuery = query)
+        if (trimmed.length < 2) {
+            _uiState.value = _uiState.value.copy(searchResults = emptyList(), isSearching = false)
+            return
+        }
+
+        val book = _uiState.value.book ?: return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isSearching = true)
+            val results = mutableListOf<com.example.data.model.BookSearchResult>()
+            val lowerQuery = trimmed.lowercase()
+
+            book.chapters.forEachIndexed { chIdx, chapter ->
+                val text = chapter.fullPlainText
+                val lowerText = text.lowercase()
+                var startPos = 0
+                var matchCountInChapter = 0
+
+                while (startPos < text.length && matchCountInChapter < 15 && results.size < 60) {
+                    val index = lowerText.indexOf(lowerQuery, startPos)
+                    if (index == -1) break
+
+                    val snippetStart = (index - 40).coerceAtLeast(0)
+                    val snippetEnd = (index + trimmed.length + 60).coerceAtMost(text.length)
+                    val prefix = if (snippetStart > 0) "…" else ""
+                    val suffix = if (snippetEnd < text.length) "…" else ""
+                    val snippet = prefix + text.substring(snippetStart, snippetEnd).replace('\n', ' ') + suffix
+
+                    results.add(
+                        com.example.data.model.BookSearchResult(
+                            id = "${chIdx}_${index}",
+                            chapterIndex = chIdx,
+                            chapterTitle = chapter.title,
+                            snippet = snippet,
+                            query = trimmed,
+                            charOffset = index
+                        )
+                    )
+
+                    matchCountInChapter++
+                    startPos = index + trimmed.length
+                }
+            }
+
+            _uiState.value = _uiState.value.copy(
+                searchResults = results,
+                isSearching = false
+            )
+        }
+    }
+
+    fun selectSearchResult(result: com.example.data.model.BookSearchResult) {
+        goToChapter(result.chapterIndex, pageIndex = 0)
+        val state = _uiState.value
+        val targetPage = EpubPaginator.findMatchingPage(state.pages, result.charOffset)
+        if (targetPage != state.currentPageIndex) {
+            onPageChanged(targetPage)
+        }
+        closeSearchSheet()
     }
 
     fun toggleSettingsSheet() {
         _uiState.value = _uiState.value.copy(
             isSettingsSheetVisible = !_uiState.value.isSettingsSheetVisible,
             isTocSheetVisible = false,
-            isBookmarksSheetVisible = false
+            isBookmarksSheetVisible = false,
+            isSearchSheetVisible = false
         )
     }
 
@@ -227,7 +349,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(
             isTocSheetVisible = !_uiState.value.isTocSheetVisible,
             isSettingsSheetVisible = false,
-            isBookmarksSheetVisible = false
+            isBookmarksSheetVisible = false,
+            isSearchSheetVisible = false
         )
     }
 
@@ -235,7 +358,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         _uiState.value = _uiState.value.copy(
             isBookmarksSheetVisible = !_uiState.value.isBookmarksSheetVisible,
             isTocSheetVisible = false,
-            isSettingsSheetVisible = false
+            isSettingsSheetVisible = false,
+            isSearchSheetVisible = false
         )
     }
 
@@ -351,6 +475,17 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                 progress = overallProgress.coerceIn(0f, 1f)
             )
         }
+    }
+
+    fun selectText(selection: TextSelection?) {
+        _uiState.value = _uiState.value.copy(
+            activeSelection = selection,
+            isControlsVisible = false
+        )
+    }
+
+    fun clearSelection() {
+        _uiState.value = _uiState.value.copy(activeSelection = null)
     }
 
     fun clearToastMessage() {

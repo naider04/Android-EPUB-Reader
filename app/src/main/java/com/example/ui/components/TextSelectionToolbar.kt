@@ -62,7 +62,6 @@ fun TextSelectionToolbar(
         val surfaceColor = Color(theme.surfaceColorHex)
         val textColor = Color(theme.textColorHex)
         val accentColor = Color(theme.accentColorHex)
-        val isDictionaryAvailable = isSearchableTerm(selection.selectedText)
 
         Card(
             shape = RoundedCornerShape(18.dp),
@@ -137,7 +136,7 @@ fun TextSelectionToolbar(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Actions row: Dictionary (only if searchable), UK Audio, US Audio, Copy
+                // Actions row: Dictionary / Look Up, UK Audio, US Audio, Copy
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -145,34 +144,32 @@ fun TextSelectionToolbar(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Dictionary Option (Only shown if term is searchable)
-                    if (isDictionaryAvailable) {
-                        Button(
-                            onClick = {
-                                onDictionaryClick(selection.selectedText, selection.sentenceContext)
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = accentColor,
-                                contentColor = Color.White
-                            ),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                            modifier = Modifier
-                                .height(40.dp)
-                                .testTag("selection_dictionary_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MenuBook,
-                                contentDescription = "Dictionary",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Dictionary",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                    // Dictionary Option (Always available for any selected text)
+                    Button(
+                        onClick = {
+                            onDictionaryClick(selection.selectedText, selection.sentenceContext)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accentColor,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .height(40.dp)
+                            .testTag("selection_dictionary_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MenuBook,
+                            contentDescription = "Dictionary",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Dictionary",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     // UK Pronunciation Button

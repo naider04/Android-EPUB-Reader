@@ -9,6 +9,7 @@ import com.example.data.model.PageBlock
 import com.example.data.model.ReaderSettings
 import com.example.data.model.VoiceSettings
 import com.example.data.model.VoiceSource
+import com.example.data.repository.BookRepository
 import com.example.ui.components.extractSentenceRange
 import com.example.ui.components.extractWordRange
 import com.example.ui.components.isSearchableTerm

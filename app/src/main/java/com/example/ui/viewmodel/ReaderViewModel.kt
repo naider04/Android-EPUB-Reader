@@ -38,6 +38,7 @@ data class ReaderUiState(
     val bookmarks: List<BookmarkEntity> = emptyList(),
     val activeSelection: TextSelection? = null,
     val selectedDictionaryEntry: DictionaryEntry? = null,
+    val selectedLookupWord: String = "",
     val lookupWordContext: String = "",
     val isWordSavedInVocabulary: Boolean = false,
     val isDictionarySheetVisible: Boolean = false,
@@ -402,14 +403,16 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun lookupWord(rawWord: String, contextSnippet: String = "") {
+        val trimmed = rawWord.trim()
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLookingUpWord = true,
                 isDictionarySheetVisible = true,
+                selectedLookupWord = trimmed,
                 lookupWordContext = contextSnippet
             )
 
-            val entry = dictionaryService.lookupWord(rawWord)
+            val entry = dictionaryService.lookupWord(trimmed)
             if (entry != null) {
                 val isSaved = vocabularyRepository.isWordSaved(entry.word)
                 _uiState.value = _uiState.value.copy(
@@ -420,7 +423,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             } else {
                 _uiState.value = _uiState.value.copy(
                     isLookingUpWord = false,
-                    toastMessage = "No definition found for '$rawWord'"
+                    selectedDictionaryEntry = null
                 )
             }
         }

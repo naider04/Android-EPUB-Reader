@@ -313,9 +313,11 @@ fun ReaderScreen(
             if (uiState.isDictionarySheetVisible) {
                 DictionaryBottomSheet(
                     entry = uiState.selectedDictionaryEntry,
+                    selectedWord = uiState.selectedLookupWord,
                     isLoading = uiState.isLookingUpWord,
                     isSavedInVocabulary = uiState.isWordSavedInVocabulary,
                     theme = theme,
+                    bookId = uiState.book?.id,
                     contextSnippet = uiState.lookupWordContext,
                     onSaveToVocabulary = { viewModel.saveCurrentWordToVocabulary() },
                     onSearchWord = { word -> viewModel.lookupWord(word) },

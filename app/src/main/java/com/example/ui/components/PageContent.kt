@@ -17,9 +17,11 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -28,15 +30,20 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.example.data.model.BlockAlignment
 import com.example.data.model.BookPage
+import com.example.data.model.InlineSpan
 import com.example.data.model.PageBlock
 import com.example.data.model.ReaderFontFamily
 import com.example.data.model.ReaderSettings
 import com.example.data.model.TextSelection
+import java.io.File
 import kotlin.math.roundToInt
 
 @Composable
@@ -45,6 +52,7 @@ fun PageContent(
     settings: ReaderSettings,
     activeSelection: TextSelection? = null,
     onTextSelected: (TextSelection) -> Unit = {},
+    onLinkClick: (String) -> Unit = {},
     onTap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -62,6 +70,8 @@ fun PageContent(
     val bodyFontSize = settings.fontSizeSp.sp
     val bodyLineHeight = (settings.fontSizeSp * settings.lineHeightMultiplier).sp
     val titleFontSize = (settings.fontSizeSp * 1.35f).sp
+
+    val bodyAlign = if (settings.justifyText) TextAlign.Justify else TextAlign.Start
 
     Column(
         modifier = modifier
@@ -85,7 +95,7 @@ fun PageContent(
             when (block) {
                 is PageBlock.Title -> {
                     InteractiveWordText(
-                        text = block.text,
+                        spans = listOf(InlineSpan(block.text)),
                         blockIndex = blockIndex,
                         selectionRange = selectionRange,
                         selectionHighlightColor = accentColor.copy(alpha = 0.35f),
@@ -99,6 +109,7 @@ fun PageContent(
                             textAlign = TextAlign.Start
                         ),
                         onTextSelected = onTextSelected,
+                        onLinkClick = onLinkClick,
                         onTap = onTap,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -120,7 +131,7 @@ fun PageContent(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         InteractiveWordText(
-                            text = block.text,
+                            spans = block.spans,
                             blockIndex = blockIndex,
                             selectionRange = selectionRange,
                             selectionHighlightColor = accentColor.copy(alpha = 0.35f),
@@ -130,9 +141,48 @@ fun PageContent(
                                 fontStyle = FontStyle.Italic,
                                 fontSize = (settings.fontSizeSp * 0.95f).sp,
                                 lineHeight = bodyLineHeight,
+                                textAlign = TextAlign.Start,
                                 color = textColor.copy(alpha = 0.9f)
                             ),
                             onTextSelected = onTextSelected,
+                            onLinkClick = onLinkClick,
+                            onTap = onTap
+                        )
+                    }
+                }
+
+                is PageBlock.ListItem -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 24.dp, bottom = 6.dp)
+                    ) {
+                        Text(
+                            text = block.marker,
+                            style = TextStyle(
+                                fontFamily = fontFamily,
+                                fontSize = bodyFontSize,
+                                lineHeight = bodyLineHeight,
+                                color = textColor,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            modifier = Modifier.width(20.dp)
+                        )
+                        InteractiveWordText(
+                            spans = block.spans,
+                            blockIndex = blockIndex,
+                            selectionRange = selectionRange,
+                            selectionHighlightColor = accentColor.copy(alpha = 0.35f),
+                            accentColor = accentColor,
+                            style = TextStyle(
+                                fontFamily = fontFamily,
+                                fontSize = bodyFontSize,
+                                lineHeight = bodyLineHeight,
+                                textAlign = bodyAlign,
+                                color = textColor
+                            ),
+                            onTextSelected = onTextSelected,
+                            onLinkClick = onLinkClick,
                             onTap = onTap
                         )
                     }
@@ -156,42 +206,68 @@ fun PageContent(
                     }
                 }
 
-                is PageBlock.ImagePlaceholder -> {
+                is PageBlock.Image -> {
+                    val imagePath = block.path
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(140.dp)
-                            .background(textColor.copy(alpha = 0.05f), shape = RoundedCornerShape(8.dp))
+                            .padding(vertical = 8.dp)
                     ) {
-                        Text(
-                            text = "[Illustration: ${block.alt}]",
-                            style = TextStyle(
-                                fontFamily = fontFamily,
-                                fontStyle = FontStyle.Italic,
-                                color = textColor.copy(alpha = 0.5f),
-                                fontSize = 12.sp
+                        if (imagePath != null && File(imagePath).exists()) {
+                            AsyncImage(
+                                model = File(imagePath),
+                                contentDescription = block.alt,
+                                contentScale = ContentScale.FillWidth,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.8f)
+                                    .padding(bottom = 4.dp)
+                                    .testTag("reader_image_${blockIndex}")
                             )
-                        )
+                        } else {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth(0.8f)
+                                    .height(140.dp)
+                                    .background(textColor.copy(alpha = 0.05f), shape = RoundedCornerShape(8.dp))
+                            ) {
+                                Text(
+                                    text = "[Illustration: ${block.alt}]",
+                                    style = TextStyle(
+                                        fontFamily = fontFamily,
+                                        fontStyle = FontStyle.Italic,
+                                        color = textColor.copy(alpha = 0.5f),
+                                        fontSize = 12.sp
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
 
                 is PageBlock.Paragraph -> {
+                    val align = when (block.alignment) {
+                        BlockAlignment.CENTER -> TextAlign.Center
+                        BlockAlignment.RIGHT -> TextAlign.Right
+                        BlockAlignment.LEFT -> TextAlign.Start
+                        BlockAlignment.JUSTIFY -> if (settings.justifyText) TextAlign.Justify else TextAlign.Start
+                    }
                     InteractiveWordText(
-                        text = block.text,
+                        spans = block.spans,
                         blockIndex = blockIndex,
                         selectionRange = selectionRange,
                         selectionHighlightColor = accentColor.copy(alpha = 0.35f),
                         accentColor = accentColor,
                         style = TextStyle(
                             fontFamily = fontFamily,
-                            fontWeight = if (block.isBold) FontWeight.Bold else FontWeight.Normal,
-                            fontStyle = if (block.isItalic) FontStyle.Italic else FontStyle.Normal,
                             fontSize = bodyFontSize,
                             lineHeight = bodyLineHeight,
+                            textAlign = align,
                             color = textColor
                         ),
                         onTextSelected = onTextSelected,
+                        onLinkClick = onLinkClick,
                         onTap = onTap,
                         modifier = Modifier.padding(bottom = 10.dp)
                     )
@@ -203,33 +279,50 @@ fun PageContent(
 
 @Composable
 fun InteractiveWordText(
-    text: String,
+    spans: List<InlineSpan>,
     blockIndex: Int,
     selectionRange: Pair<Int, Int>?,
     selectionHighlightColor: Color,
     accentColor: Color,
     style: TextStyle,
     onTextSelected: (TextSelection) -> Unit,
+    onLinkClick: (String) -> Unit = {},
     onTap: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val annotatedString = remember(text, selectionRange, selectionHighlightColor) {
+    val text = remember(spans) { spans.joinToString("") { it.text } }
+
+    val annotatedString = remember(text, spans, selectionRange, selectionHighlightColor, accentColor) {
         buildAnnotatedString {
-            if (selectionRange != null &&
-                selectionRange.first in 0 until text.length &&
-                selectionRange.second in (selectionRange.first + 1)..text.length
-            ) {
-                append(text.substring(0, selectionRange.first))
+            var charPos = 0
+            for (span in spans) {
+                val spanStart = charPos
+                val spanText = span.text
+                val spanEnd = spanStart + spanText.length
                 withStyle(
                     SpanStyle(
-                        background = selectionHighlightColor
+                        fontWeight = if (span.bold) FontWeight.Bold else style.fontWeight ?: FontWeight.Normal,
+                        fontStyle = if (span.italic) FontStyle.Italic else style.fontStyle ?: FontStyle.Normal,
+                        textDecoration = if (span.underline || span.linkTarget != null) TextDecoration.Underline else TextDecoration.None,
+                        color = if (span.linkTarget != null) accentColor else style.color
                     )
                 ) {
-                    append(text.substring(selectionRange.first, selectionRange.second))
+                    if (selectionRange != null &&
+                        selectionRange.first in spanStart until spanEnd &&
+                        selectionRange.second in spanStart..spanEnd
+                    ) {
+                        val selStart = maxOf(spanStart, selectionRange.first)
+                        val selEnd = minOf(spanEnd, selectionRange.second)
+                        append(spanText.substring(0, selStart - spanStart))
+                        withStyle(SpanStyle(background = selectionHighlightColor)) {
+                            append(spanText.substring(selStart - spanStart, selEnd - spanStart))
+                        }
+                        append(spanText.substring(selEnd - spanStart))
+                    } else {
+                        append(spanText)
+                    }
                 }
-                append(text.substring(selectionRange.second))
-            } else {
-                append(text)
+                charPos = spanEnd
             }
         }
     }
@@ -246,8 +339,19 @@ fun InteractiveWordText(
                 .fillMaxWidth()
                 .pointerInput(text, blockIndex) {
                     detectTapGestures(
-                        onTap = {
-                            onTap()
+                        onTap = { pos ->
+                            val layout = layoutResult
+                            if (layout != null) {
+                                val offset = layout.getOffsetForPosition(pos)
+                                val link = findLinkAt(offset, spans)
+                                if (link != null) {
+                                    onLinkClick(link)
+                                } else {
+                                    onTap()
+                                }
+                            } else {
+                                onTap()
+                            }
                         },
                         onLongPress = { pos ->
                             val layout = layoutResult ?: return@detectTapGestures
@@ -279,7 +383,6 @@ fun InteractiveWordText(
                 }
         )
 
-        // Draggable Selection Handles (Start & End)
         val layout = layoutResult
         if (selectionRange != null && layout != null &&
             selectionRange.first in 0..text.length &&
@@ -292,7 +395,6 @@ fun InteractiveWordText(
             var startDragAnchor by remember { mutableStateOf(Offset.Zero) }
             var endDragAnchor by remember { mutableStateOf(Offset.Zero) }
 
-            // Start Selection Handle (draggable)
             DraggableSelectionHandle(
                 cursorRect = startRect,
                 isStartHandle = true,
@@ -329,7 +431,6 @@ fun InteractiveWordText(
                 }
             )
 
-            // End Selection Handle (draggable)
             DraggableSelectionHandle(
                 cursorRect = endRect,
                 isStartHandle = false,
@@ -367,6 +468,18 @@ fun InteractiveWordText(
             )
         }
     }
+}
+
+private fun findLinkAt(offset: Int, spans: List<InlineSpan>): String? {
+    var pos = 0
+    for (span in spans) {
+        val end = pos + span.text.length
+        if (span.linkTarget != null && offset in pos until end) {
+            return span.linkTarget
+        }
+        pos = end
+    }
+    return null
 }
 
 @Composable
@@ -426,7 +539,6 @@ fun DraggableSelectionHandle(
             val centerX = size.width / 2f
             val lineHeight = cursorRect.height
 
-            // 1. Draw vertical cursor bar line
             drawLine(
                 color = accentColor,
                 start = Offset(centerX, 0f),
@@ -434,7 +546,6 @@ fun DraggableSelectionHandle(
                 strokeWidth = cursorLineWidthPx
             )
 
-            // 2. Draw teardrop/circular handle knob at the bottom of the cursor line
             val knobCenterY = lineHeight + handleRadiusPx
             val knobCenterX = if (isStartHandle) {
                 centerX - (handleRadiusPx * 0.45f)
@@ -442,10 +553,8 @@ fun DraggableSelectionHandle(
                 centerX + (handleRadiusPx * 0.45f)
             }
 
-            // Draw droplet path
             val path = Path().apply {
                 if (isStartHandle) {
-                    // Left-facing teardrop pin
                     moveTo(centerX, lineHeight)
                     lineTo(knobCenterX, knobCenterY - handleRadiusPx)
                     arcTo(
@@ -461,7 +570,6 @@ fun DraggableSelectionHandle(
                     )
                     close()
                 } else {
-                    // Right-facing teardrop pin
                     moveTo(centerX, lineHeight)
                     lineTo(knobCenterX, knobCenterY - handleRadiusPx)
                     arcTo(
@@ -479,21 +587,18 @@ fun DraggableSelectionHandle(
                 }
             }
 
-            // Knob shadow/halo
             drawCircle(
                 color = Color.Black.copy(alpha = 0.2f),
                 radius = handleRadiusPx + 2f,
                 center = Offset(knobCenterX, knobCenterY + 1f)
             )
 
-            // Knob fill
             drawPath(
                 path = path,
                 color = accentColor,
                 style = Fill
             )
 
-            // Inner white dot for visual precision
             drawCircle(
                 color = Color.White.copy(alpha = 0.9f),
                 radius = handleRadiusPx * 0.35f,

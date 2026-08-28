@@ -38,15 +38,54 @@ data class ReaderSettings(
     val marginChoice: ReaderPageMargin = ReaderPageMargin.NORMAL,
     val brightnessPercent: Float = 1.0f,
     val showHeaderFooter: Boolean = true,
-    val tapToTurnPage: Boolean = true
+    val tapToTurnPage: Boolean = true,
+    val justifyText: Boolean = true,
+    val hyphenation: Boolean = true
 )
+
+/**
+ * A run of inline text with optional formatting and an optional link target.
+ * [linkTarget] is either a fragment like "#notes1" / "#ch1" (internal EPUB link)
+ * or a full http(s) URL (external link).
+ */
+data class InlineSpan(
+    val text: String,
+    val bold: Boolean = false,
+    val italic: Boolean = false,
+    val underline: Boolean = false,
+    val linkTarget: String? = null
+)
+
+/** Text alignment for a block, derived from the EPUB's own inline/block styles. */
+enum class BlockAlignment { LEFT, CENTER, RIGHT, JUSTIFY }
 
 sealed class PageBlock {
     data class Title(val text: String, val level: Int = 1) : PageBlock()
-    data class Paragraph(val text: String, val isItalic: Boolean = false, val isBold: Boolean = false) : PageBlock()
-    data class Blockquote(val text: String, val citation: String? = null) : PageBlock()
+    data class Paragraph(
+        val spans: List<InlineSpan>,
+        val alignment: BlockAlignment = BlockAlignment.JUSTIFY
+    ) : PageBlock() {
+        constructor(text: String) : this(listOf(InlineSpan(text)))
+        constructor(text: String, isItalic: Boolean, isBold: Boolean) :
+            this(listOf(InlineSpan(text, bold = isBold, italic = isItalic)))
+
+        val text: String get() = spans.joinToString("") { it.text }
+        val isItalic: Boolean get() = spans.all { it.italic }
+        val isBold: Boolean get() = spans.all { it.bold }
+    }
+    data class Blockquote(
+        val spans: List<InlineSpan>,
+        val citation: String? = null
+    ) : PageBlock() {
+        constructor(text: String) : this(listOf(InlineSpan(text)))
+
+        val text: String get() = spans.joinToString("") { it.text }
+    }
+    data class ListItem(val spans: List<InlineSpan>, val marker: String = "•", val indentLevel: Int = 1) : PageBlock() {
+        val text: String get() = spans.joinToString("") { it.text }
+    }
     data class Divider(val style: String = "asterisks") : PageBlock()
-    data class ImagePlaceholder(val alt: String, val path: String? = null) : PageBlock()
+    data class Image(val alt: String, val path: String?, val widthRatio: Float = 1f) : PageBlock()
 }
 
 data class BookPage(

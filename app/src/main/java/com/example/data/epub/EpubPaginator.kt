@@ -79,14 +79,13 @@ object EpubPaginator {
 
             when (block) {
                 is PageBlock.Title -> {
-                    val layout = buildStaticLayout(block.text, titlePaint, textWidthPx, settings.lineHeightMultiplier)
+                    val layout = buildStaticLayout(block.text, titlePaint, textWidthPx, settings.lineHeightMultiplier, justify = false)
                     val totalBlockHeight = layout.height + titleSpacingPx
 
                     if (totalBlockHeight <= remainingHeightPx || currentPageBlocks.isEmpty()) {
                         currentPageBlocks.add(block)
                         remainingHeightPx -= totalBlockHeight
                     } else {
-                        // Title doesn't fit on this page, push to next page
                         pages.add(currentPageBlocks)
                         currentPageBlocks = mutableListOf(block)
                         remainingHeightPx = availablePageHeightPx - totalBlockHeight
@@ -106,8 +105,69 @@ object EpubPaginator {
 
                 is PageBlock.Blockquote -> {
                     val quoteWidth = max(80, textWidthPx - (32 * density).toInt())
-                    val layout = buildStaticLayout(block.text, quotePaint, quoteWidth, settings.lineHeightMultiplier)
+                    val layout = buildStaticLayout(block.text, quotePaint, quoteWidth, settings.lineHeightMultiplier, justify = false)
                     val totalBlockHeight = layout.height + paragraphSpacingPx
+
+                    when {
+                        totalBlockHeight <= remainingHeightPx || currentPageBlocks.isEmpty() -> {
+                            currentPageBlocks.add(block)
+                            remainingHeightPx -= totalBlockHeight
+                        }
+                        layout.height > availablePageHeightPx -> {
+                            splitTextOverflow(
+                                block.text, layout,
+                                { text -> PageBlock.Blockquote(text.toString()) }
+                            ) { first, second ->
+                                if (first != null) currentPageBlocks.add(first)
+                                pages.add(currentPageBlocks)
+                                currentPageBlocks = mutableListOf()
+                                remainingHeightPx = availablePageHeightPx
+                                if (second != null) blockQueue.addFirst(second)
+                            }
+                        }
+                        else -> {
+                            pages.add(currentPageBlocks)
+                            currentPageBlocks = mutableListOf(block)
+                            remainingHeightPx = availablePageHeightPx - totalBlockHeight
+                        }
+                    }
+                }
+
+                is PageBlock.ListItem -> {
+                    // Indent the list item body and hang the marker via left padding in rendering.
+                    val itemWidth = max(80, textWidthPx - (24 * density).toInt())
+                    val layout = buildStaticLayout(block.text, bodyPaint, itemWidth, settings.lineHeightMultiplier, justify = settings.justifyText)
+                    val totalBlockHeight = layout.height + paragraphSpacingPx
+
+                    when {
+                        totalBlockHeight <= remainingHeightPx || currentPageBlocks.isEmpty() -> {
+                            currentPageBlocks.add(block)
+                            remainingHeightPx -= totalBlockHeight
+                        }
+                        layout.height > availablePageHeightPx -> {
+                            splitTextOverflow(
+                                block.text, layout,
+                                { text -> PageBlock.ListItem(listOf(com.example.data.model.InlineSpan(text.toString())), block.marker, block.indentLevel) }
+                            ) { first, second ->
+                                if (first != null) currentPageBlocks.add(first)
+                                pages.add(currentPageBlocks)
+                                currentPageBlocks = mutableListOf()
+                                remainingHeightPx = availablePageHeightPx
+                                if (second != null) blockQueue.addFirst(second)
+                            }
+                        }
+                        else -> {
+                            pages.add(currentPageBlocks)
+                            currentPageBlocks = mutableListOf(block)
+                            remainingHeightPx = availablePageHeightPx - totalBlockHeight
+                        }
+                    }
+                }
+
+                is PageBlock.Image -> {
+                    val imageWidthPx = max(120, (textWidthPx * 0.7f).toInt())
+                    val imgHeight = (imageWidthPx * 0.62f).toInt().coerceAtLeast((120 * density).toInt())
+                    val totalBlockHeight = imgHeight + paragraphSpacingPx
 
                     if (totalBlockHeight <= remainingHeightPx || currentPageBlocks.isEmpty()) {
                         currentPageBlocks.add(block)
@@ -119,57 +179,37 @@ object EpubPaginator {
                     }
                 }
 
-                is PageBlock.ImagePlaceholder -> {
-                    val imgHeight = (180 * density).toInt()
-                    if (imgHeight <= remainingHeightPx || currentPageBlocks.isEmpty()) {
-                        currentPageBlocks.add(block)
-                        remainingHeightPx -= imgHeight
-                    } else {
-                        pages.add(currentPageBlocks)
-                        currentPageBlocks = mutableListOf(block)
-                        remainingHeightPx = availablePageHeightPx - imgHeight
-                    }
-                }
-
                 is PageBlock.Paragraph -> {
-                    val layout = buildStaticLayout(block.text, bodyPaint, textWidthPx, settings.lineHeightMultiplier)
+                    val layout = buildStaticLayout(block.text, bodyPaint, textWidthPx, settings.lineHeightMultiplier, justify = settings.justifyText)
                     val totalBlockHeight = layout.height + paragraphSpacingPx
 
                     if (totalBlockHeight <= remainingHeightPx) {
-                        // Entire paragraph fits on this page
                         currentPageBlocks.add(block)
                         remainingHeightPx -= totalBlockHeight
                     } else if (remainingHeightPx < (bodyPaint.fontSpacing * 1.8f) && currentPageBlocks.isNotEmpty()) {
-                        // Less than 2 lines fit and page already has content -> start fresh page
                         pages.add(currentPageBlocks)
                         currentPageBlocks = mutableListOf()
                         remainingHeightPx = availablePageHeightPx
                         blockQueue.addFirst(block)
                     } else {
-                        // Paragraph needs to be cleanly split across page boundary
                         val targetHeightForSplit = remainingHeightPx - paragraphSpacingPx
                         var lineBreakIndex = layout.getLineForVertical(targetHeightForSplit)
 
                         if (lineBreakIndex <= 0 && currentPageBlocks.isEmpty()) {
-                            // At least put 1 line if the page is empty
                             lineBreakIndex = 1
                         }
 
                         if (lineBreakIndex > 0 && lineBreakIndex < layout.lineCount) {
                             val splitCharOffset = layout.getLineEnd(lineBreakIndex - 1)
-                            val firstPartText = block.text.substring(0, splitCharOffset).trimEnd()
-                            val secondPartText = block.text.substring(splitCharOffset).trimStart()
+                            val (firstBlock, secondBlock) = splitParagraph(block, splitCharOffset)
 
-                            if (firstPartText.isNotBlank()) {
-                                currentPageBlocks.add(block.copy(text = firstPartText))
-                            }
+                            if (firstBlock != null) currentPageBlocks.add(firstBlock)
                             pages.add(currentPageBlocks)
 
-                            // Remainder starts new page
                             currentPageBlocks = mutableListOf()
                             remainingHeightPx = availablePageHeightPx
-                            if (secondPartText.isNotBlank()) {
-                                blockQueue.addFirst(block.copy(text = secondPartText))
+                            if (secondBlock != null) {
+                                blockQueue.addFirst(secondBlock)
                             }
                         } else {
                             if (currentPageBlocks.isNotEmpty()) {
@@ -202,6 +242,7 @@ object EpubPaginator {
                     is PageBlock.Paragraph -> it.text.length
                     is PageBlock.Title -> it.text.length
                     is PageBlock.Blockquote -> it.text.length
+                    is PageBlock.ListItem -> it.text.length
                     else -> 0
                 }
             }
@@ -225,15 +266,22 @@ object EpubPaginator {
         text: CharSequence,
         paint: TextPaint,
         width: Int,
-        lineSpacingMultiplier: Float
+        lineSpacingMultiplier: Float,
+        justify: Boolean = false,
+        hyphenate: Boolean = true
     ): StaticLayout {
         val safeText = if (text.isBlank()) " " else text
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            StaticLayout.Builder.obtain(safeText, 0, safeText.length, paint, width)
+            val builder = StaticLayout.Builder.obtain(safeText, 0, safeText.length, paint, width)
                 .setAlignment(Layout.Alignment.ALIGN_NORMAL)
                 .setLineSpacing(0f, lineSpacingMultiplier)
                 .setIncludePad(false)
-                .build()
+                .setHyphenationFrequency(if (hyphenate) Layout.HYPHENATION_FREQUENCY_NORMAL else Layout.HYPHENATION_FREQUENCY_NONE)
+                .setBreakStrategy(Layout.BREAK_STRATEGY_HIGH_QUALITY)
+            if (Build.VERSION.SDK_INT >= 26 && justify) {
+                builder.setJustificationMode(Layout.JUSTIFICATION_MODE_INTER_WORD)
+            }
+            builder.build()
         } else {
             @Suppress("DEPRECATION")
             StaticLayout(
@@ -246,6 +294,50 @@ object EpubPaginator {
                 false
             )
         }
+    }
+
+    /**
+     * Splits a paragraph block at [splitCharOffset] into two new paragraphs.
+     * Inline formatting spans are clamped so the split never throws on bad offsets.
+     */
+    private fun splitParagraph(block: PageBlock.Paragraph, splitCharOffset: Int): Pair<PageBlock.Paragraph?, PageBlock.Paragraph?> {
+        val fullText = block.text
+        val offset = splitCharOffset.coerceIn(0, fullText.length)
+        val first = fullText.substring(0, offset).trimEnd()
+        val second = fullText.substring(offset).trimStart()
+
+        val firstBlock = if (first.isNotBlank()) {
+            PageBlock.Paragraph(listOf(com.example.data.model.InlineSpan(first)), block.alignment)
+        } else null
+        val secondBlock = if (second.isNotBlank()) {
+            PageBlock.Paragraph(listOf(com.example.data.model.InlineSpan(second)), block.alignment)
+        } else null
+        return Pair(firstBlock, secondBlock)
+    }
+
+    /**
+     * Splits a text block that is taller than a single page into two halves so the
+     * content is never dropped or clipped. Used for Blockquote and ListItem blocks.
+     * [makeBlock] rebuilds a block of the same type from a chunk of text.
+     */
+    private inline fun splitTextOverflow(
+        text: String,
+        layout: StaticLayout,
+        makeBlock: (CharSequence) -> com.example.data.model.PageBlock,
+        emit: (first: com.example.data.model.PageBlock?, second: com.example.data.model.PageBlock?) -> Unit
+    ) {
+        val half = layout.lineCount / 2
+        if (half <= 0) {
+            emit(null, null)
+            return
+        }
+        val offset = layout.getLineEnd(half - 1).coerceIn(0, text.length)
+        val first = text.substring(0, offset).trimEnd()
+        val second = text.substring(offset).trimStart()
+        emit(
+            if (first.isNotBlank()) makeBlock(first) else null,
+            if (second.isNotBlank()) makeBlock(second) else null
+        )
     }
 
     fun findMatchingPage(pages: List<BookPage>, previousCharOffset: Int): Int {

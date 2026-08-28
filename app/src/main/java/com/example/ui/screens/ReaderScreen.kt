@@ -88,10 +88,15 @@ fun ReaderScreen(
     ) {
         val widthPx = with(density) { maxWidth.roundToPx() }
         val heightPx = with(density) {
-            // Reserve space for top header and bottom footer indicators
-            val topInset = if (uiState.settings.showHeaderFooter) 56.dp else 24.dp
-            val bottomInset = if (uiState.settings.showHeaderFooter) 56.dp else 24.dp
-            (maxHeight - topInset - bottomInset).roundToPx()
+            // The pager Column and the page content add their own vertical padding on top of
+            // the box height. We must report the ACTUAL area available to paginate blocks,
+            // otherwise the paginator over-estimates page height and clips the bottom of every
+            // page -- which makes the last line of a page (and the final block of a chapter)
+            // unreachable ("unfinished chapters / missing content").
+            val columnTop = if (uiState.settings.showHeaderFooter) 48.dp else 16.dp
+            val columnBottom = if (uiState.settings.showHeaderFooter) 44.dp else 16.dp
+            val pageContentVertical = 24.dp // PageContent's vertical padding (12 top + 12 bottom)
+            (maxHeight - columnTop - columnBottom - pageContentVertical).roundToPx()
         }
 
         LaunchedEffect(widthPx, heightPx, density.density, uiState.settings) {
@@ -148,6 +153,9 @@ fun ReaderScreen(
                                     activeSelection = uiState.activeSelection,
                                     onTextSelected = { selection ->
                                         viewModel.selectText(selection)
+                                    },
+                                    onLinkClick = { linkTarget ->
+                                        viewModel.handleLink(linkTarget)
                                     },
                                     onTap = {
                                         if (uiState.activeSelection != null) {

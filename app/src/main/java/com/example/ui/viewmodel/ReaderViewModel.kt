@@ -487,6 +487,53 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
+    /**
+     * Handles tapping an inline link.
+     * - External http(s) links open in the browser.
+     * - Internal links (#anchor or other .xhtml file) navigate within the book.
+     */
+    fun handleLink(linkTarget: String?) {
+        val link = linkTarget ?: return
+        val trimmed = link.trim()
+        if (trimmed.isEmpty()) return
+
+        if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+            openExternalLink(trimmed)
+            return
+        }
+
+        val state = _uiState.value
+        val book = state.book ?: return
+        if (book.chapters.isEmpty()) return
+
+        // Internal reference: strip fragment, compare by file basename.
+        val hrefPart = trimmed.substringBefore("#").substringAfterLast('/')
+        val currentHref = book.chapters.getOrNull(state.currentChapterIndex)?.href?.substringAfterLast('/')
+
+        val targetIndex = when {
+            hrefPart.isBlank() || hrefPart == currentHref -> {
+                // Anchor within the current chapter: stay here.
+                return
+            }
+            else -> book.chapters.indexOfFirst { it.href.substringAfterLast('/') == hrefPart }
+        }
+
+        if (targetIndex >= 0) {
+            goToChapter(targetIndex, pageIndex = 0)
+        } else {
+            _uiState.value = _uiState.value.copy(toastMessage = "Link target not found in this book")
+        }
+    }
+
+    private fun openExternalLink(url: String) {
+        val context = getApplication<Application>()
+        runCatching {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
+    }
+
     fun clearSelection() {
         _uiState.value = _uiState.value.copy(activeSelection = null)
     }

@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -87,8 +88,7 @@ fun PageContent(
             )
     ) {
         page.blocks.forEachIndexed { blockIndex, block ->
-            val isBlockSelected = activeSelection?.blockIndex == blockIndex
-            val selectionRange = if (isBlockSelected && activeSelection != null) {
+            val selectionRange = if (activeSelection?.blockIndex == blockIndex) {
                 Pair(activeSelection.startOffset, activeSelection.endOffset)
             } else null
 
@@ -292,13 +292,9 @@ fun InteractiveWordText(
 ) {
     val text = remember(spans) { spans.joinToString("") { it.text } }
 
-    val annotatedString = remember(text, spans, selectionRange, selectionHighlightColor, accentColor) {
+    val annotatedString = remember(text, spans, selectionRange, selectionHighlightColor, accentColor, style) {
         buildAnnotatedString {
-            var charPos = 0
             for (span in spans) {
-                val spanStart = charPos
-                val spanText = span.text
-                val spanEnd = spanStart + spanText.length
                 withStyle(
                     SpanStyle(
                         fontWeight = if (span.bold) FontWeight.Bold else style.fontWeight ?: FontWeight.Normal,
@@ -307,28 +303,27 @@ fun InteractiveWordText(
                         color = if (span.linkTarget != null) accentColor else style.color
                     )
                 ) {
-                    if (selectionRange != null &&
-                        selectionRange.first in spanStart until spanEnd &&
-                        selectionRange.second in spanStart..spanEnd
-                    ) {
-                        val selStart = maxOf(spanStart, selectionRange.first)
-                        val selEnd = minOf(spanEnd, selectionRange.second)
-                        append(spanText.substring(0, selStart - spanStart))
-                        withStyle(SpanStyle(background = selectionHighlightColor)) {
-                            append(spanText.substring(selStart - spanStart, selEnd - spanStart))
-                        }
-                        append(spanText.substring(selEnd - spanStart))
-                    } else {
-                        append(spanText)
-                    }
+                    append(span.text)
                 }
-                charPos = spanEnd
+            }
+            if (selectionRange != null && selectionRange.first < selectionRange.second && length > 0) {
+                val clampedStart = selectionRange.first.coerceIn(0, length)
+                val clampedEnd = selectionRange.second.coerceIn(0, length)
+                if (clampedStart < clampedEnd) {
+                    addStyle(
+                        SpanStyle(background = selectionHighlightColor),
+                        start = clampedStart,
+                        end = clampedEnd
+                    )
+                }
             }
         }
     }
 
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     val hapticFeedback = LocalHapticFeedback.current
+
+    val isJustified = style.textAlign == TextAlign.Justify
 
     Box(modifier = modifier) {
         Text(
@@ -337,12 +332,12 @@ fun InteractiveWordText(
             onTextLayout = { layoutResult = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(text, blockIndex) {
+                .pointerInput(text, blockIndex, isJustified) {
                     detectTapGestures(
                         onTap = { pos ->
                             val layout = layoutResult
                             if (layout != null) {
-                                val offset = layout.getOffsetForPosition(pos)
+                                val offset = getJustifiedOffsetForPosition(layout, text, pos, isJustified)
                                 val link = findLinkAt(offset, spans)
                                 if (link != null) {
                                     onLinkClick(link)
@@ -355,7 +350,7 @@ fun InteractiveWordText(
                         },
                         onLongPress = { pos ->
                             val layout = layoutResult ?: return@detectTapGestures
-                            val offset = layout.getOffsetForPosition(pos)
+                            val offset = getJustifiedOffsetForPosition(layout, text, pos, isJustified)
                             if (offset in 0 until text.length) {
                                 val wordRange = extractWordRange(text, offset)
                                 if (wordRange != null) {
@@ -389,8 +384,8 @@ fun InteractiveWordText(
             selectionRange.second in 0..text.length &&
             selectionRange.first < selectionRange.second
         ) {
-            val startRect = layout.getCursorRect(selectionRange.first.coerceIn(0, text.length))
-            val endRect = layout.getCursorRect(selectionRange.second.coerceIn(0, text.length))
+            val startRect = getSelectionStartRect(layout, text, selectionRange.first, isJustified)
+            val endRect = getSelectionEndRect(layout, text, selectionRange.second, isJustified)
 
             var startDragAnchor by remember { mutableStateOf(Offset.Zero) }
             var endDragAnchor by remember { mutableStateOf(Offset.Zero) }
@@ -402,14 +397,14 @@ fun InteractiveWordText(
                 onDragStart = {
                     val curLayout = layoutResult
                     if (curLayout != null) {
-                        val rect = curLayout.getCursorRect(selectionRange.first.coerceIn(0, text.length))
+                        val rect = getSelectionStartRect(curLayout, text, selectionRange.first, isJustified)
                         startDragAnchor = Offset(rect.left, (rect.top + rect.bottom) / 2f)
                     }
                 },
                 onDrag = { totalDragDelta ->
                     val curLayout = layoutResult ?: return@DraggableSelectionHandle
                     val targetPos = startDragAnchor + totalDragDelta
-                    val newOffset = curLayout.getOffsetForPosition(targetPos)
+                    val newOffset = getJustifiedOffsetForPosition(curLayout, text, targetPos, isJustified)
                     val endBound = selectionRange.second
                     val clampedStart = newOffset.coerceIn(0, (endBound - 1).coerceAtLeast(0))
 
@@ -438,14 +433,14 @@ fun InteractiveWordText(
                 onDragStart = {
                     val curLayout = layoutResult
                     if (curLayout != null) {
-                        val rect = curLayout.getCursorRect(selectionRange.second.coerceIn(0, text.length))
+                        val rect = getSelectionEndRect(curLayout, text, selectionRange.second, isJustified)
                         endDragAnchor = Offset(rect.left, (rect.top + rect.bottom) / 2f)
                     }
                 },
                 onDrag = { totalDragDelta ->
                     val curLayout = layoutResult ?: return@DraggableSelectionHandle
                     val targetPos = endDragAnchor + totalDragDelta
-                    val newOffset = curLayout.getOffsetForPosition(targetPos)
+                    val newOffset = getJustifiedOffsetForPosition(curLayout, text, targetPos, isJustified)
                     val startBound = selectionRange.first
                     val clampedEnd = newOffset.coerceIn(startBound + 1, text.length)
 
@@ -468,6 +463,177 @@ fun InteractiveWordText(
             )
         }
     }
+}
+
+/**
+ * Computes the horizontal visual position of a character offset, correctly accounting for
+ * inter-word spacing expansion when text is justified (TextAlign.Justify).
+ */
+fun getJustifiedHorizontal(
+    layout: TextLayoutResult,
+    text: String,
+    offset: Int,
+    isJustified: Boolean
+): Float {
+    if (text.isEmpty()) return 0f
+    val clampedOffset = offset.coerceIn(0, text.length)
+    val charIndex = clampedOffset.coerceIn(0, (text.length - 1).coerceAtLeast(0))
+    val line = layout.getLineForOffset(charIndex)
+    val basePos = layout.getHorizontalPosition(clampedOffset, usePrimaryDirection = true)
+
+    if (!isJustified) return basePos
+
+    val lineStart = layout.getLineStart(line)
+    val lineVisibleEnd = layout.getLineEnd(line, visibleEnd = true)
+    val isLastLine = line == layout.lineCount - 1 ||
+        (lineVisibleEnd in 1..text.length && text[lineVisibleEnd - 1] == '\n') ||
+        (layout.getLineEnd(line) in 1..text.length && text[layout.getLineEnd(line) - 1] == '\n')
+
+    if (isLastLine || lineVisibleEnd <= lineStart) {
+        return basePos
+    }
+
+    val xLastChar = layout.getHorizontalPosition(lineVisibleEnd, usePrimaryDirection = true)
+    val lineRight = layout.getLineRight(line)
+    val extraTotal = lineRight - xLastChar
+    if (extraTotal <= 0f) {
+        return basePos
+    }
+
+    var totalSpaces = 0
+    var spacesBeforeOffset = 0
+    for (i in lineStart until lineVisibleEnd) {
+        if (text[i] == ' ') {
+            totalSpaces++
+            if (i < clampedOffset) {
+                spacesBeforeOffset++
+            }
+        }
+    }
+
+    if (totalSpaces == 0) return basePos
+
+    val extraPerSpace = extraTotal / totalSpaces
+    return basePos + (spacesBeforeOffset * extraPerSpace)
+}
+
+/**
+ * Maps a screen pixel position to a character offset, accurately accounting for inter-word
+ * spacing expansion when text is justified (TextAlign.Justify).
+ */
+fun getJustifiedOffsetForPosition(
+    layout: TextLayoutResult,
+    text: String,
+    pos: Offset,
+    isJustified: Boolean
+): Int {
+    if (!isJustified || text.isEmpty()) {
+        return layout.getOffsetForPosition(pos)
+    }
+
+    val boundedY = pos.y.coerceIn(0f, (layout.size.height - 1).toFloat().coerceAtLeast(0f))
+    val line = layout.getLineForVerticalPosition(boundedY)
+    val lineStart = layout.getLineStart(line)
+    val lineVisibleEnd = layout.getLineEnd(line, visibleEnd = true)
+    val isLastLine = line == layout.lineCount - 1 ||
+        (lineVisibleEnd in 1..text.length && text[lineVisibleEnd - 1] == '\n') ||
+        (layout.getLineEnd(line) in 1..text.length && text[layout.getLineEnd(line) - 1] == '\n')
+
+    if (isLastLine || lineVisibleEnd <= lineStart) {
+        return layout.getOffsetForPosition(pos)
+    }
+
+    val xLastChar = layout.getHorizontalPosition(lineVisibleEnd, usePrimaryDirection = true)
+    val lineRight = layout.getLineRight(line)
+    val extraTotal = lineRight - xLastChar
+    if (extraTotal <= 0f) {
+        return layout.getOffsetForPosition(pos)
+    }
+
+    var totalSpaces = 0
+    for (i in lineStart until lineVisibleEnd) {
+        if (text[i] == ' ') totalSpaces++
+    }
+    if (totalSpaces == 0) {
+        return layout.getOffsetForPosition(pos)
+    }
+
+    val extraPerSpace = extraTotal / totalSpaces
+
+    val firstX = layout.getHorizontalPosition(lineStart, usePrimaryDirection = true)
+    if (pos.x <= firstX) {
+        return lineStart
+    }
+    if (pos.x >= lineRight) {
+        return lineVisibleEnd
+    }
+
+    var currentSpaces = 0
+    var curLeft = firstX
+    for (i in lineStart until lineVisibleEnd) {
+        val nextSpaces = if (text[i] == ' ') currentSpaces + 1 else currentSpaces
+        val nextX = layout.getHorizontalPosition(i + 1, usePrimaryDirection = true) + (nextSpaces * extraPerSpace)
+        val midPoint = (curLeft + nextX) / 2f
+        if (pos.x < midPoint) {
+            return i
+        }
+        currentSpaces = nextSpaces
+        curLeft = nextX
+    }
+
+    return lineVisibleEnd
+}
+
+/**
+ * Calculates the exact pixel bounding rect for the start selection handle.
+ * Bounded to the left edge of the first selected character using layout horizontal positions.
+ */
+fun getSelectionStartRect(
+    layout: TextLayoutResult,
+    text: String,
+    startOffset: Int,
+    isJustified: Boolean = false
+): Rect {
+    if (text.isEmpty()) return Rect.Zero
+    val clampedStart = startOffset.coerceIn(0, text.length)
+    val charIndex = clampedStart.coerceIn(0, (text.length - 1).coerceAtLeast(0))
+    val line = layout.getLineForOffset(charIndex)
+    val top = layout.getLineTop(line)
+    val bottom = layout.getLineBottom(line)
+
+    val lineStart = layout.getLineStart(line)
+    val x = if (clampedStart <= lineStart) {
+        layout.getLineLeft(line)
+    } else {
+        getJustifiedHorizontal(layout, text, clampedStart, isJustified)
+    }
+    return Rect(left = x, top = top, right = x, bottom = bottom)
+}
+
+/**
+ * Calculates the exact pixel bounding rect for the end selection handle.
+ * Bounded to the right edge of the last selected character using layout horizontal positions.
+ */
+fun getSelectionEndRect(
+    layout: TextLayoutResult,
+    text: String,
+    endOffset: Int,
+    isJustified: Boolean = false
+): Rect {
+    if (text.isEmpty()) return Rect.Zero
+    val clampedEnd = endOffset.coerceIn(0, text.length)
+    val charIndex = (clampedEnd - 1).coerceIn(0, (text.length - 1).coerceAtLeast(0))
+    val line = layout.getLineForOffset(charIndex)
+    val top = layout.getLineTop(line)
+    val bottom = layout.getLineBottom(line)
+
+    val lineVisibleEnd = layout.getLineEnd(line, visibleEnd = true)
+    val x = if (clampedEnd >= lineVisibleEnd) {
+        layout.getLineRight(line)
+    } else {
+        getJustifiedHorizontal(layout, text, clampedEnd, isJustified)
+    }
+    return Rect(left = x, top = top, right = x, bottom = bottom)
 }
 
 private fun findLinkAt(offset: Int, spans: List<InlineSpan>): String? {
@@ -493,7 +659,7 @@ fun DraggableSelectionHandle(
 ) {
     val density = LocalDensity.current
     val touchTargetSizePx = with(density) { 48.dp.toPx() }
-    val handleRadiusPx = with(density) { 10.dp.toPx() }
+    val handleRadiusPx = with(density) { 9.dp.toPx() }
     val cursorLineWidthPx = with(density) { 2.5.dp.toPx() }
 
     val currentOnDrag by rememberUpdatedState(onDrag)
@@ -511,7 +677,10 @@ fun DraggableSelectionHandle(
                 val top = rect.top
                 IntOffset(left.roundToInt(), top.roundToInt())
             }
-            .size(48.dp, with(density) { (cursorRect.height + touchTargetSizePx / 2f).toDp() })
+            .size(
+                width = 48.dp,
+                height = with(density) { (cursorRect.height + handleRadiusPx * 2.5f + 8f).toDp() }
+            )
             .testTag(if (isStartHandle) "selection_start_handle" else "selection_end_handle")
             .pointerInput(isStartHandle) {
                 detectDragGestures(
@@ -537,15 +706,18 @@ fun DraggableSelectionHandle(
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
             val centerX = size.width / 2f
-            val lineHeight = cursorRect.height
+            val lineHeight = currentCursorRect.height
 
+            // 1. Vertical cursor stick exactly aligned to the text boundary (centerX -> cursorRect.left)
             drawLine(
                 color = accentColor,
                 start = Offset(centerX, 0f),
                 end = Offset(centerX, lineHeight),
-                strokeWidth = cursorLineWidthPx
+                strokeWidth = cursorLineWidthPx,
+                cap = StrokeCap.Round
             )
 
+            // 2. Selection handle pin knob at the base of the stick
             val knobCenterY = lineHeight + handleRadiusPx
             val knobCenterX = if (isStartHandle) {
                 centerX - (handleRadiusPx * 0.45f)
@@ -553,24 +725,17 @@ fun DraggableSelectionHandle(
                 centerX + (handleRadiusPx * 0.45f)
             }
 
+            // Drop shadow
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.2f),
+                radius = handleRadiusPx + 1.5f,
+                center = Offset(knobCenterX, knobCenterY + 1f)
+            )
+
+            // Pin / teardrop neck & body
             val path = Path().apply {
+                moveTo(centerX, lineHeight)
                 if (isStartHandle) {
-                    moveTo(centerX, lineHeight)
-                    lineTo(knobCenterX, knobCenterY - handleRadiusPx)
-                    arcTo(
-                        rect = Rect(
-                            left = knobCenterX - handleRadiusPx,
-                            top = knobCenterY - handleRadiusPx,
-                            right = knobCenterX + handleRadiusPx,
-                            bottom = knobCenterY + handleRadiusPx
-                        ),
-                        startAngleDegrees = -90f,
-                        sweepAngleDegrees = 270f,
-                        forceMoveTo = false
-                    )
-                    close()
-                } else {
-                    moveTo(centerX, lineHeight)
                     lineTo(knobCenterX, knobCenterY - handleRadiusPx)
                     arcTo(
                         rect = Rect(
@@ -584,14 +749,22 @@ fun DraggableSelectionHandle(
                         forceMoveTo = false
                     )
                     close()
+                } else {
+                    lineTo(knobCenterX, knobCenterY - handleRadiusPx)
+                    arcTo(
+                        rect = Rect(
+                            left = knobCenterX - handleRadiusPx,
+                            top = knobCenterY - handleRadiusPx,
+                            right = knobCenterX + handleRadiusPx,
+                            bottom = knobCenterY + handleRadiusPx
+                        ),
+                        startAngleDegrees = -90f,
+                        sweepAngleDegrees = 270f,
+                        forceMoveTo = false
+                    )
+                    close()
                 }
             }
-
-            drawCircle(
-                color = Color.Black.copy(alpha = 0.2f),
-                radius = handleRadiusPx + 2f,
-                center = Offset(knobCenterX, knobCenterY + 1f)
-            )
 
             drawPath(
                 path = path,
@@ -599,8 +772,9 @@ fun DraggableSelectionHandle(
                 style = Fill
             )
 
+            // Inner white grip dot
             drawCircle(
-                color = Color.White.copy(alpha = 0.9f),
+                color = Color.White.copy(alpha = 0.95f),
                 radius = handleRadiusPx * 0.35f,
                 center = Offset(knobCenterX, knobCenterY)
             )

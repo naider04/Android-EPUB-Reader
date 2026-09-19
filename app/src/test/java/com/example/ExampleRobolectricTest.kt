@@ -169,3 +169,4 @@ class ExampleRobolectricTest {
         assertEquals(1200, updatedEntity.currentCharacterOffset)
     }
 }
+

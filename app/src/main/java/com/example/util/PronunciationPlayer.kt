@@ -59,7 +59,7 @@ class PronunciationPlayer(private val context: Context) : TextToSpeech.OnInitLis
         }
     }
 
-    fun speak(rawText: String, accent: PronunciationAccent) {
+    fun speak(rawText: String, accent: PronunciationAccent = PronunciationAccent.US) {
         val textToSpeak = cleanWordForSpeech(rawText)
         if (textToSpeak.isBlank()) return
 

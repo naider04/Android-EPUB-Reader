@@ -254,6 +254,7 @@ fun ReaderScreen(
                     theme = theme,
                     onDictionaryClick = { term, sentence ->
                         viewModel.lookupWord(term, sentence)
+                        pronunciationPlayer.speak(term, PronunciationAccent.US)
                     },
                     onPronounceUkClick = { textToSpeak ->
                         pronunciationPlayer.speak(textToSpeak, PronunciationAccent.UK)

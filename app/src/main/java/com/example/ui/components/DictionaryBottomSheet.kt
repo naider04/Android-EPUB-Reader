@@ -3,6 +3,8 @@ package com.example.ui.components
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.CookieManager
@@ -20,11 +22,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -54,12 +56,22 @@ fun DictionaryBottomSheet(
     theme: ReaderTheme,
     bookId: String? = null,
     contextSnippet: String = "",
-    onSearchWord: (String) -> Unit,
+    onSearchWord: (String) -> Unit = {},
     onDismiss: () -> Unit,
     isSavedInVocabulary: Boolean = false,
     onSaveToVocabulary: () -> Unit = {}
 ) {
-    var searchInput by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val isOnline = remember {
+        try {
+            val cm = context.getSystemService(ConnectivityManager::class.java)
+            val network = cm?.activeNetwork
+            val caps = cm?.getNetworkCapabilities(network)
+            caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        } catch (e: Exception) {
+            false
+        }
+    }
     val textColor = Color(theme.textColorHex)
     val accentColor = Color(theme.accentColorHex)
     val surfaceColor = Color(theme.surfaceColorHex)
@@ -78,45 +90,6 @@ fun DictionaryBottomSheet(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp)
         ) {
-            // Search field
-            OutlinedTextField(
-                value = searchInput,
-                onValueChange = { searchInput = it },
-                placeholder = { Text("Look up any word in dictionary...", fontSize = 13.sp) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = "Search",
-                        tint = accentColor
-                    )
-                },
-                trailingIcon = {
-                    if (searchInput.isNotBlank()) {
-                        Button(
-                            onClick = { onSearchWord(searchInput.trim()) },
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            modifier = Modifier.padding(end = 4.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = accentColor)
-                        ) {
-                            Text("Define", fontSize = 12.sp, color = Color.White)
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = accentColor,
-                    unfocusedBorderColor = textColor.copy(alpha = 0.25f),
-                    focusedTextColor = textColor,
-                    unfocusedTextColor = textColor
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("dict_search_input")
-            )
-
-            Spacer(modifier = Modifier.height(14.dp))
-
             if (isLoading) {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -310,14 +283,42 @@ fun DictionaryBottomSheet(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    // GOOGLE EMBEDDED SEARCH VIEW (Below dictionary definition)
+                    // GOOGLE EMBEDDED SEARCH VIEW (Online mode only)
                     val effectiveWord = selectedWord.ifBlank { entry.word }
-                    GoogleImagesWebView(
-                        word = effectiveWord,
-                        accentColor = accentColor,
-                        textColor = textColor,
-                        surfaceColor = surfaceColor
-                    )
+                    if (isOnline) {
+                        GoogleImagesWebView(
+                            word = effectiveWord,
+                            accentColor = accentColor,
+                            textColor = textColor,
+                            surfaceColor = surfaceColor
+                        )
+                    } else {
+                        Surface(
+                            color = textColor.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Public,
+                                    contentDescription = "Offline Mode",
+                                    tint = accentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Offline Mode: Oxford Advanced Learner's Dictionary active",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = textColor.copy(alpha = 0.7f),
+                                        fontSize = 12.sp
+                                    )
+                                )
+                            }
+                        }
+                    }
 
                     // Source label
                     Spacer(modifier = Modifier.height(10.dp))
@@ -431,12 +432,40 @@ fun DictionaryBottomSheet(
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // GOOGLE EMBEDDED SEARCH VIEW (Search, AI Mode, All, Images, Pronunciation)
-                    GoogleImagesWebView(
-                        word = selectedWord,
-                        accentColor = accentColor,
-                        textColor = textColor,
-                        surfaceColor = surfaceColor
-                    )
+                    if (isOnline) {
+                        GoogleImagesWebView(
+                            word = selectedWord,
+                            accentColor = accentColor,
+                            textColor = textColor,
+                            surfaceColor = surfaceColor
+                        )
+                    } else {
+                        Surface(
+                            color = textColor.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Public,
+                                    contentDescription = "Offline Mode",
+                                    tint = accentColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Offline Mode: No offline definition found for \"$selectedWord\"",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = textColor.copy(alpha = 0.7f),
+                                        fontSize = 12.sp
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
             } else {
                 Box(
@@ -446,7 +475,7 @@ fun DictionaryBottomSheet(
                         .height(120.dp)
                 ) {
                     Text(
-                        text = "Press and hold any word in the book, or type above, to look up its definition and images.",
+                        text = "Press and hold any word in the book to look up its definition and images.",
                         style = MaterialTheme.typography.bodyMedium.copy(
                             color = textColor.copy(alpha = 0.6f),
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -459,14 +488,14 @@ fun DictionaryBottomSheet(
 }
 
 enum class GoogleSearchTab(val label: String) {
-    IMAGES("Images"),
     ALL("All"),
-    AI_MODE("AI Mode"),
+    TRANSLATE("Translate"),
+    IMAGES("Images"),
     PRONUNCIATION("Pronunciation")
 }
 
 /**
- * Embedded Google Search Browser with Mode Selection Bar (AI Mode, All, Images, Pronunciation)
+ * Embedded Google Search Browser with Mode Selection Bar (All, Translate, Images, Pronunciation)
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -477,7 +506,7 @@ fun GoogleImagesWebView(
     surfaceColor: Color
 ) {
     val context = LocalContext.current
-    var selectedTab by remember(word) { mutableStateOf(GoogleSearchTab.IMAGES) }
+    var selectedTab by remember(word) { mutableStateOf(GoogleSearchTab.ALL) }
     var isWebLoading by remember { mutableStateOf(true) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
@@ -486,15 +515,18 @@ fun GoogleImagesWebView(
         word.substringBefore(" (root:").trim().trim('"', '\'', '.', ',', ';', ':', '!', '?', '(', ')', '[', ']', '“', '”', '‘', '’')
     }
     val encodedWord = remember(cleanSelectedWord) { URLEncoder.encode(cleanSelectedWord, "UTF-8") }
+    val encodedTranslateQuery = remember(cleanSelectedWord) {
+        URLEncoder.encode("que significa $cleanSelectedWord", "UTF-8")
+    }
     val encodedPronunciationQuery = remember(cleanSelectedWord) {
         URLEncoder.encode("$cleanSelectedWord pronunciation", "UTF-8")
     }
 
     val currentUrl = remember(cleanSelectedWord, selectedTab) {
         when (selectedTab) {
-            GoogleSearchTab.IMAGES -> "https://www.google.com/search?tbm=isch&q=$encodedWord&hl=en"
             GoogleSearchTab.ALL -> "https://www.google.com/search?q=$encodedWord&hl=en"
-            GoogleSearchTab.AI_MODE -> "https://www.google.com/search?q=$encodedWord&hl=en"
+            GoogleSearchTab.TRANSLATE -> "https://www.google.com/search?q=$encodedTranslateQuery"
+            GoogleSearchTab.IMAGES -> "https://www.google.com/search?tbm=isch&q=$encodedWord&hl=en"
             GoogleSearchTab.PRONUNCIATION -> "https://www.google.com/search?q=$encodedPronunciationQuery&hl=en"
         }
     }
@@ -561,35 +593,7 @@ fun GoogleImagesWebView(
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // AI Mode Tab
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = if (selectedTab == GoogleSearchTab.AI_MODE) accentColor else Color.Transparent,
-                        modifier = Modifier.clickable {
-                            selectedTab = GoogleSearchTab.AI_MODE
-                        }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AutoAwesome,
-                                contentDescription = "AI Mode",
-                                tint = if (selectedTab == GoogleSearchTab.AI_MODE) Color.White else textColor.copy(alpha = 0.75f),
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "AI Mode",
-                                fontSize = 10.5.sp,
-                                fontWeight = if (selectedTab == GoogleSearchTab.AI_MODE) FontWeight.Bold else FontWeight.Medium,
-                                color = if (selectedTab == GoogleSearchTab.AI_MODE) Color.White else textColor.copy(alpha = 0.75f)
-                            )
-                        }
-                    }
-
-                    // All Tab
+                    // All Tab (Default)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = if (selectedTab == GoogleSearchTab.ALL) accentColor else Color.Transparent,
@@ -613,6 +617,34 @@ fun GoogleImagesWebView(
                                 fontSize = 10.5.sp,
                                 fontWeight = if (selectedTab == GoogleSearchTab.ALL) FontWeight.Bold else FontWeight.Medium,
                                 color = if (selectedTab == GoogleSearchTab.ALL) Color.White else textColor.copy(alpha = 0.75f)
+                            )
+                        }
+                    }
+
+                    // Translate Tab ("que significa <word>")
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (selectedTab == GoogleSearchTab.TRANSLATE) accentColor else Color.Transparent,
+                        modifier = Modifier.clickable {
+                            selectedTab = GoogleSearchTab.TRANSLATE
+                        }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Translate,
+                                contentDescription = "Translate",
+                                tint = if (selectedTab == GoogleSearchTab.TRANSLATE) Color.White else textColor.copy(alpha = 0.75f),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Translate",
+                                fontSize = 10.5.sp,
+                                fontWeight = if (selectedTab == GoogleSearchTab.TRANSLATE) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selectedTab == GoogleSearchTab.TRANSLATE) Color.White else textColor.copy(alpha = 0.75f)
                             )
                         }
                     }
@@ -723,7 +755,7 @@ fun GoogleImagesWebView(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(240.dp)
+                    .height(280.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .border(1.dp, textColor.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
                     .background(Color.White)
@@ -755,6 +787,26 @@ fun GoogleImagesWebView(
                             settings.useWideViewPort = true
                             settings.builtInZoomControls = true
                             settings.displayZoomControls = false
+
+                            isVerticalScrollBarEnabled = true
+                            isHorizontalScrollBarEnabled = true
+                            isNestedScrollingEnabled = true
+                            overScrollMode = WebView.OVER_SCROLL_IF_CONTENT_SCROLLS
+
+                            // Request parent to not intercept touch events so the WebView can scroll freely
+                            setOnTouchListener { v, event ->
+                                when (event.action) {
+                                    android.view.MotionEvent.ACTION_DOWN,
+                                    android.view.MotionEvent.ACTION_MOVE -> {
+                                        v.parent?.requestDisallowInterceptTouchEvent(true)
+                                    }
+                                    android.view.MotionEvent.ACTION_UP,
+                                    android.view.MotionEvent.ACTION_CANCEL -> {
+                                        v.parent?.requestDisallowInterceptTouchEvent(false)
+                                    }
+                                }
+                                false
+                            }
 
                             webViewClient = object : WebViewClient() {
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {

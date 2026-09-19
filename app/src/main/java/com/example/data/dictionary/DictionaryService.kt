@@ -2,6 +2,8 @@ package com.example.data.dictionary
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.CustomDictionaryEntity
 import com.example.data.model.ActiveDictionaryInfo
@@ -78,6 +80,17 @@ class DictionaryService private constructor(private val context: Context) {
         activateOaldDictionary()
     }
 
+    fun isNetworkAvailable(): Boolean {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val network = cm?.activeNetwork ?: return false
+            val caps = cm.getNetworkCapabilities(network) ?: return false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     suspend fun lookupWord(rawWord: String): DictionaryEntry? = withContext(Dispatchers.Default) {
         val clean = cleanWord(rawWord)
         if (clean.isBlank()) return@withContext null
@@ -86,11 +99,19 @@ class DictionaryService private constructor(private val context: Context) {
         var entry = findCustom(clean) ?: findCustom(clean.lowercase())
         if (entry != null) return@withContext entry
 
-        // 2. Direct OALD search (normalization handles case, syllable dots, apostrophes)
+        // 2. Offline Dictionary (OALD 10th Ed.) is used ONLY when there is no internet connection
+        val hasInternet = isNetworkAvailable()
+        if (hasInternet) {
+            // When internet is available, return immediately so the dictionary sheet
+            // displays instantly without any network timeout or blocking delay.
+            return@withContext null
+        }
+
+        // 3. Offline Dictionary (OALD 10th Ed.) lookup from local SQLite database (takes <2ms)
         entry = lookupOald(normalizeTerm(clean), maxDepth = 1)
         if (entry != null) return@withContext entry
 
-        // 3. Morphological lemmatization & stem search (e.g. plurals, past tense, adverbs, gerunds)
+        // Morphological lemmatization & stem search in offline dictionary
         for (stem in getWordStems(clean.lowercase())) {
             entry = lookupOald(normalizeTerm(stem), maxDepth = 1)
             if (entry != null) {
@@ -98,7 +119,7 @@ class DictionaryService private constructor(private val context: Context) {
             }
         }
 
-        // 4. If still not found, build a helpful generated dictionary card with definition template
+        // If still not found offline, build fallback entry
         return@withContext buildFallbackDefinition(clean)
     }
 

@@ -172,4 +172,6 @@ def build_database(zip_path, output_db_path):
     print(f"Finished! SQLite DB created at {output_db_path} ({db_size:.2f} MB)")
 
 if __name__ == "__main__":
-    build_database("OALD-10.zip", "/app/src/main/assets/dictionaries/oald10.db")
+    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app/src/main/assets/dictionaries/oald10.db")
+    zip_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "OALD-10.zip")
+    build_database(zip_path, output_path)

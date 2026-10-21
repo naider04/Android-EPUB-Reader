@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -79,7 +80,7 @@ fun TableOfContentsSheet(
                     onClick = { selectedTab = 1 },
                     text = {
                         Text(
-                            "Bookmarks (${bookmarks.size})",
+                            "Bookmarks & Quotes (${bookmarks.size})",
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal,
                             color = if (selectedTab == 1) accentColor else textColor.copy(alpha = 0.7f)
                         )
@@ -146,7 +147,7 @@ fun TableOfContentsSheet(
                     }
                 }
             } else {
-                // Bookmarks list
+                // Bookmarks & Quotes list
                 if (bookmarks.isEmpty()) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -155,7 +156,7 @@ fun TableOfContentsSheet(
                             .padding(24.dp)
                     ) {
                         Text(
-                            text = "No bookmarks yet.\nTap the bookmark icon at the top of any page to save your spot!",
+                            text = "No bookmarks or quotes yet.\nTap the bookmark icon to save a spot, or select text and tap 'Save Quote'!",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = textColor.copy(alpha = 0.6f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -170,6 +171,7 @@ fun TableOfContentsSheet(
                     ) {
                         items(bookmarks.size) { idx ->
                             val bm = bookmarks[idx]
+                            val isQuote = bm.note == "Quote"
                             Surface(
                                 color = accentColor.copy(alpha = 0.08f),
                                 shape = RoundedCornerShape(10.dp),
@@ -185,20 +187,39 @@ fun TableOfContentsSheet(
                                     modifier = Modifier.padding(12.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.Bookmark,
-                                        contentDescription = null,
+                                        imageVector = if (isQuote) Icons.Default.FormatQuote else Icons.Default.Bookmark,
+                                        contentDescription = if (isQuote) "Quote" else "Bookmark",
                                         tint = accentColor,
                                         modifier = Modifier
                                             .size(20.dp)
                                             .padding(end = 6.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = bm.chapterTitle,
-                                            fontWeight = FontWeight.Bold,
-                                            color = textColor,
-                                            fontSize = 14.sp
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            if (isQuote) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = accentColor.copy(alpha = 0.15f),
+                                                    modifier = Modifier.padding(end = 6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = "QUOTE",
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = accentColor,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
+                                            Text(
+                                                text = bm.chapterTitle,
+                                                fontWeight = FontWeight.Bold,
+                                                color = textColor,
+                                                fontSize = 14.sp
+                                            )
+                                        }
                                         Text(
                                             text = "Sheet ${bm.pageIndex + 1} • ${dateFormat.format(Date(bm.timestamp))}",
                                             fontSize = 11.sp,
@@ -206,10 +227,10 @@ fun TableOfContentsSheet(
                                         )
                                         if (bm.excerpt.isNotBlank()) {
                                             Text(
-                                                text = "\"${bm.excerpt}\"",
+                                                text = "“${bm.excerpt}”",
                                                 fontSize = 12.sp,
-                                                color = textColor.copy(alpha = 0.8f),
-                                                maxLines = 2,
+                                                color = textColor.copy(alpha = 0.85f),
+                                                maxLines = 3,
                                                 overflow = TextOverflow.Ellipsis,
                                                 modifier = Modifier.padding(top = 4.dp)
                                             )
@@ -221,7 +242,7 @@ fun TableOfContentsSheet(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
-                                            contentDescription = "Delete Bookmark",
+                                            contentDescription = if (isQuote) "Delete Quote" else "Delete Bookmark",
                                             tint = textColor.copy(alpha = 0.4f),
                                             modifier = Modifier.size(18.dp)
                                         )

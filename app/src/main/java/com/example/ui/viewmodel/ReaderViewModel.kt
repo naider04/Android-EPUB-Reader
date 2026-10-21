@@ -393,6 +393,27 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun saveQuote(quoteText: String) {
+        val state = _uiState.value
+        val book = state.book ?: return
+        val currentPage = state.pages.getOrNull(state.currentPageIndex)
+        val chapterTitle = currentPage?.chapterTitle ?: "Chapter ${state.currentChapterIndex + 1}"
+
+        viewModelScope.launch {
+            bookRepository.saveQuote(
+                bookId = book.id,
+                chapterIndex = state.currentChapterIndex,
+                chapterTitle = chapterTitle,
+                pageIndex = state.currentPageIndex,
+                quote = quoteText
+            )
+            _uiState.value = _uiState.value.copy(
+                activeSelection = null,
+                toastMessage = "Quote saved!"
+            )
+        }
+    }
+
     private fun checkIfCurrentPageIsBookmarked() {
         val state = _uiState.value
         val bookId = state.book?.id ?: return

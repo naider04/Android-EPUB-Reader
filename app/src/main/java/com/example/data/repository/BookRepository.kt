@@ -283,4 +283,24 @@ class BookRepository(private val context: Context) {
     suspend fun removeBookmark(bookmarkId: Long) = withContext(Dispatchers.IO) {
         bookmarkDao.deleteBookmark(bookmarkId)
     }
+
+    suspend fun saveQuote(
+        bookId: String,
+        chapterIndex: Int,
+        chapterTitle: String,
+        pageIndex: Int,
+        quote: String
+    ): Long = withContext(Dispatchers.IO) {
+        bookmarkDao.insertBookmark(
+            BookmarkEntity(
+                bookId = bookId,
+                chapterIndex = chapterIndex,
+                chapterTitle = chapterTitle,
+                pageIndex = pageIndex,
+                excerpt = quote.trim(),
+                note = "Quote",
+                timestamp = System.currentTimeMillis()
+            )
+        )
+    }
 }

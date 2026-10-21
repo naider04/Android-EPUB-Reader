@@ -159,7 +159,7 @@ fun DictionaryBottomSheet(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "UK",
+                                    text = "\uD83C\uDDEC\uD83C\uDDE7 UK",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -186,7 +186,7 @@ fun DictionaryBottomSheet(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "US",
+                                    text = "\uD83C\uDDFA\uD83C\uDDF8 US",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -394,7 +394,7 @@ fun DictionaryBottomSheet(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "UK",
+                                    text = "\uD83C\uDDEC\uD83C\uDDE7 UK",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -421,7 +421,7 @@ fun DictionaryBottomSheet(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "US",
+                                    text = "\uD83C\uDDFA\uD83C\uDDF8 US",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -488,14 +488,14 @@ fun DictionaryBottomSheet(
 }
 
 enum class GoogleSearchTab(val label: String) {
-    ALL("All"),
-    TRANSLATE("Translate"),
+    DEFINITION("Definition"),
+    TRANSLATE("Español"),
     IMAGES("Images"),
     PRONUNCIATION("Pronunciation")
 }
 
 /**
- * Embedded Google Search Browser with Mode Selection Bar (All, Translate, Images, Pronunciation)
+ * Embedded Google Search Browser with Mode Selection Bar (Definition, Español, Images, Pronunciation)
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -506,7 +506,7 @@ fun GoogleImagesWebView(
     surfaceColor: Color
 ) {
     val context = LocalContext.current
-    var selectedTab by remember(word) { mutableStateOf(GoogleSearchTab.ALL) }
+    var selectedTab by remember(word) { mutableStateOf(GoogleSearchTab.DEFINITION) }
     var isWebLoading by remember { mutableStateOf(true) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
 
@@ -515,6 +515,9 @@ fun GoogleImagesWebView(
         word.substringBefore(" (root:").trim().trim('"', '\'', '.', ',', ';', ':', '!', '?', '(', ')', '[', ']', '“', '”', '‘', '’')
     }
     val encodedWord = remember(cleanSelectedWord) { URLEncoder.encode(cleanSelectedWord, "UTF-8") }
+    val encodedDefinitionQuery = remember(cleanSelectedWord) {
+        URLEncoder.encode("$cleanSelectedWord meaning", "UTF-8")
+    }
     val encodedTranslateQuery = remember(cleanSelectedWord) {
         URLEncoder.encode("que significa $cleanSelectedWord", "UTF-8")
     }
@@ -524,7 +527,7 @@ fun GoogleImagesWebView(
 
     val currentUrl = remember(cleanSelectedWord, selectedTab) {
         when (selectedTab) {
-            GoogleSearchTab.ALL -> "https://www.google.com/search?q=$encodedWord&hl=en"
+            GoogleSearchTab.DEFINITION -> "https://www.google.com/search?q=$encodedDefinitionQuery&hl=en"
             GoogleSearchTab.TRANSLATE -> "https://www.google.com/search?q=$encodedTranslateQuery"
             GoogleSearchTab.IMAGES -> "https://www.google.com/search?tbm=isch&q=$encodedWord&hl=en"
             GoogleSearchTab.PRONUNCIATION -> "https://www.google.com/search?q=$encodedPronunciationQuery&hl=en"
@@ -586,19 +589,19 @@ fun GoogleImagesWebView(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Segmented tabs: AI Mode | All | Images | Pronunciation
+                // Segmented tabs: Definition | Español | Images | Pronunciation
                 Row(
                     modifier = Modifier
                         .background(textColor.copy(alpha = 0.08f), shape = RoundedCornerShape(20.dp))
                         .padding(3.dp),
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    // All Tab (Default)
+                    // Definition Tab (Default)
                     Surface(
                         shape = RoundedCornerShape(16.dp),
-                        color = if (selectedTab == GoogleSearchTab.ALL) accentColor else Color.Transparent,
+                        color = if (selectedTab == GoogleSearchTab.DEFINITION) accentColor else Color.Transparent,
                         modifier = Modifier.clickable {
-                            selectedTab = GoogleSearchTab.ALL
+                            selectedTab = GoogleSearchTab.DEFINITION
                         }
                     ) {
                         Row(
@@ -607,21 +610,21 @@ fun GoogleImagesWebView(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Public,
-                                contentDescription = "All",
-                                tint = if (selectedTab == GoogleSearchTab.ALL) Color.White else textColor.copy(alpha = 0.75f),
+                                contentDescription = "Definition",
+                                tint = if (selectedTab == GoogleSearchTab.DEFINITION) Color.White else textColor.copy(alpha = 0.75f),
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "All",
+                                text = "Definition",
                                 fontSize = 10.5.sp,
-                                fontWeight = if (selectedTab == GoogleSearchTab.ALL) FontWeight.Bold else FontWeight.Medium,
-                                color = if (selectedTab == GoogleSearchTab.ALL) Color.White else textColor.copy(alpha = 0.75f)
+                                fontWeight = if (selectedTab == GoogleSearchTab.DEFINITION) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selectedTab == GoogleSearchTab.DEFINITION) Color.White else textColor.copy(alpha = 0.75f)
                             )
                         }
                     }
 
-                    // Translate Tab ("que significa <word>")
+                    // Español Tab ("que significa <word>")
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = if (selectedTab == GoogleSearchTab.TRANSLATE) accentColor else Color.Transparent,
@@ -635,13 +638,13 @@ fun GoogleImagesWebView(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Translate,
-                                contentDescription = "Translate",
+                                contentDescription = "Español",
                                 tint = if (selectedTab == GoogleSearchTab.TRANSLATE) Color.White else textColor.copy(alpha = 0.75f),
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "Translate",
+                                text = "Español",
                                 fontSize = 10.5.sp,
                                 fontWeight = if (selectedTab == GoogleSearchTab.TRANSLATE) FontWeight.Bold else FontWeight.Medium,
                                 color = if (selectedTab == GoogleSearchTab.TRANSLATE) Color.White else textColor.copy(alpha = 0.75f)

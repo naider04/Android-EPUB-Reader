@@ -262,6 +262,9 @@ fun ReaderScreen(
                     onPronounceUsClick = { textToSpeak ->
                         pronunciationPlayer.speak(textToSpeak, PronunciationAccent.US)
                     },
+                    onSaveQuoteClick = { quoteText ->
+                        viewModel.saveQuote(quoteText)
+                    },
                     onDismiss = {
                         viewModel.clearSelection()
                     },

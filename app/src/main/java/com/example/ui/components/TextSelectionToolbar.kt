@@ -46,6 +46,7 @@ fun TextSelectionToolbar(
     onDictionaryClick: (term: String, sentence: String) -> Unit,
     onPronounceUkClick: (text: String) -> Unit,
     onPronounceUsClick: (text: String) -> Unit,
+    onSaveQuoteClick: (text: String) -> Unit = {},
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -172,7 +173,7 @@ fun TextSelectionToolbar(
                         )
                     }
 
-                    // UK Pronunciation Button
+                    // UK Pronunciation Button (Flag + Speaker)
                     FilledTonalButton(
                         onClick = {
                             onPronounceUkClick(selection.selectedText)
@@ -192,15 +193,14 @@ fun TextSelectionToolbar(
                             contentDescription = "Pronounce UK",
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Pronounce UK",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            text = "\uD83C\uDDEC\uD83C\uDDE7", // 🇬🇧 UK flag
+                            fontSize = 16.sp
                         )
                     }
 
-                    // US Pronunciation Button
+                    // US Pronunciation Button (Flag + Speaker)
                     FilledTonalButton(
                         onClick = {
                             onPronounceUsClick(selection.selectedText)
@@ -220,9 +220,36 @@ fun TextSelectionToolbar(
                             contentDescription = "Pronounce US",
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Pronounce US",
+                            text = "\uD83C\uDDFA\uD83C\uDDF8", // 🇺🇸 US flag
+                            fontSize = 16.sp
+                        )
+                    }
+
+                    // Save Quote Button
+                    FilledTonalButton(
+                        onClick = {
+                            onSaveQuoteClick(selection.selectedText)
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = accentColor.copy(alpha = 0.15f),
+                            contentColor = accentColor
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier
+                            .height(40.dp)
+                            .testTag("selection_save_quote_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FormatQuote,
+                            contentDescription = "Save Quote",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Save Quote",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
                         )

@@ -145,7 +145,7 @@ fun TextSelectionToolbar(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Dictionary Option (Always available for any selected text)
+                    // Google Search Option (Always available for any selected text)
                     Button(
                         onClick = {
                             onDictionaryClick(selection.selectedText, selection.sentenceContext)
@@ -161,13 +161,13 @@ fun TextSelectionToolbar(
                             .testTag("selection_dictionary_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MenuBook,
-                            contentDescription = "Dictionary",
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Google",
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Dictionary",
+                            text = "Google",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )

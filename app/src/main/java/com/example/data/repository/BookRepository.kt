@@ -192,6 +192,21 @@ class BookRepository(private val context: Context) {
             }
 
             val book = parseResult.getOrThrow()
+
+            // If this book was already imported, reuse the existing one to preserve progress and bookmarks
+            val existingBooks = bookDao.getAllBooks().first()
+            val existing = existingBooks.find {
+                it.title.equals(book.title, ignoreCase = true) &&
+                (it.author.equals(book.author, ignoreCase = true) || book.author.isBlank())
+            }
+            if (existing != null) {
+                persistentFile.delete()
+                val existingBook = getEpubBook(existing.id)
+                if (existingBook != null) {
+                    return@withContext Result.success(existingBook)
+                }
+            }
+
             bookCache[book.id] = book
 
             val entity = BookEntity(

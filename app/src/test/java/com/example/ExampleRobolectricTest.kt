@@ -168,5 +168,56 @@ class ExampleRobolectricTest {
         assertEquals(4, updatedEntity.currentPageInChapter)
         assertEquals(1200, updatedEntity.currentCharacterOffset)
     }
+
+    @Test
+    fun `app theme persists across simulated app restarts`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        // Test saving DARK mode
+        com.example.data.preferences.ThemePreferences.setAppTheme(context, com.example.data.preferences.AppThemeMode.DARK)
+        val loadedDark = com.example.data.preferences.ThemePreferences.getAppTheme(context)
+        assertEquals(com.example.data.preferences.AppThemeMode.DARK, loadedDark)
+
+        // Verify reader settings also synced to DARK
+        val readerSettings = com.example.data.preferences.ThemePreferences.loadReaderSettings(context)
+        assertEquals(com.example.data.model.ReaderTheme.DARK, readerSettings.themeChoice)
+
+        // Test saving SEPIA mode
+        com.example.data.preferences.ThemePreferences.setAppTheme(context, com.example.data.preferences.AppThemeMode.SEPIA)
+        val loadedSepia = com.example.data.preferences.ThemePreferences.getAppTheme(context)
+        assertEquals(com.example.data.preferences.AppThemeMode.SEPIA, loadedSepia)
+
+        // Test saving WARM_PAPER mode
+        com.example.data.preferences.ThemePreferences.setAppTheme(context, com.example.data.preferences.AppThemeMode.WARM_PAPER)
+        val loadedWarm = com.example.data.preferences.ThemePreferences.getAppTheme(context)
+        assertEquals(com.example.data.preferences.AppThemeMode.WARM_PAPER, loadedWarm)
+    }
+
+    @Test
+    fun `reader settings persist across sessions including custom theme and font size`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        val customSettings = com.example.data.model.ReaderSettings(
+            fontSizeSp = 22f,
+            lineHeightMultiplier = 1.8f,
+            fontChoice = com.example.data.model.ReaderFontFamily.MONOSPACE,
+            themeChoice = com.example.data.model.ReaderTheme.SLATE,
+            marginChoice = com.example.data.model.ReaderPageMargin.WIDE,
+            showHeaderFooter = false
+        )
+
+        com.example.data.preferences.ThemePreferences.saveReaderSettings(context, customSettings, syncAppTheme = true)
+
+        val restored = com.example.data.preferences.ThemePreferences.loadReaderSettings(context)
+        assertEquals(22f, restored.fontSizeSp, 0.01f)
+        assertEquals(1.8f, restored.lineHeightMultiplier, 0.01f)
+        assertEquals(com.example.data.model.ReaderFontFamily.MONOSPACE, restored.fontChoice)
+        assertEquals(com.example.data.model.ReaderTheme.SLATE, restored.themeChoice)
+        assertEquals(com.example.data.model.ReaderPageMargin.WIDE, restored.marginChoice)
+        assertFalse(restored.showHeaderFooter)
+
+        // Verify app theme was synced to SLATE
+        assertEquals(com.example.data.preferences.AppThemeMode.SLATE, com.example.data.preferences.ThemePreferences.getAppTheme(context))
+    }
 }
 

@@ -23,6 +23,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.preferences.ThemePreferences
 import com.example.data.repository.BookRepository
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.ReaderScreen
@@ -38,7 +40,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         handleIncomingIntent(intent)
         setContent {
-            EpubReaderTheme {
+            val appTheme by ThemePreferences.getAppThemeFlow(this)
+                .collectAsStateWithLifecycle(initialValue = ThemePreferences.getAppTheme(this))
+
+            EpubReaderTheme(appTheme = appTheme) {
                 EpubReaderApp(
                     incomingUri = incomingUriState.value,
                     onConsumeIncomingUri = { incomingUriState.value = null },

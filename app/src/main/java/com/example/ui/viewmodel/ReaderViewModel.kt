@@ -13,6 +13,7 @@ import com.example.data.model.ReaderSettings
 import com.example.data.repository.BookRepository
 import com.example.data.repository.VocabularyRepository
 import com.example.data.model.TextSelection
+import com.example.data.preferences.ThemePreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,7 +53,9 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private val vocabularyRepository = VocabularyRepository(application)
     private val dictionaryService = DictionaryService.getInstance(application)
 
-    private val _uiState = MutableStateFlow(ReaderUiState())
+    private val _uiState = MutableStateFlow(
+        ReaderUiState(settings = ThemePreferences.loadReaderSettings(application))
+    )
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
     private var currentViewportWidthPx: Int = 0
@@ -367,6 +370,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun updateSettings(transform: (ReaderSettings) -> ReaderSettings) {
         val updated = transform(_uiState.value.settings)
         _uiState.value = _uiState.value.copy(settings = updated)
+        ThemePreferences.saveReaderSettings(getApplication(), updated, syncAppTheme = true)
         repaginate()
     }
 

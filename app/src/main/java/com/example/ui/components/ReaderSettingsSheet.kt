@@ -129,11 +129,25 @@ fun ReaderSettingsSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 2. Theme Presets
-            Text(
-                text = "Theme Palette",
-                style = MaterialTheme.typography.labelLarge.copy(color = textColor),
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+            ) {
+                Text(
+                    text = "Theme Palette",
+                    style = MaterialTheme.typography.labelLarge.copy(color = textColor)
+                )
+                Text(
+                    text = "Saved persistently",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = accentColor,
+                        fontSize = 11.sp
+                    )
+                )
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth()

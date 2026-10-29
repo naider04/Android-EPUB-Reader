@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material3.*
@@ -21,7 +20,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.entity.BookmarkEntity
-import com.example.data.model.EpubChapter
 import com.example.data.model.ReaderTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -30,11 +28,11 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TableOfContentsSheet(
-    chapters: List<EpubChapter>,
-    currentChapterIndex: Int,
+    tocEntries: List<ReaderEngine.TocEntry>,
+    currentTocLabel: String,
     bookmarks: List<BookmarkEntity>,
     theme: ReaderTheme,
-    onSelectChapter: (Int) -> Unit,
+    onSelectEntry: (String) -> Unit,
     onSelectBookmark: (BookmarkEntity) -> Unit,
     onDeleteBookmark: (Long) -> Unit,
     onDismiss: () -> Unit
@@ -57,7 +55,6 @@ fun TableOfContentsSheet(
                 .fillMaxHeight(0.7f)
                 .padding(horizontal = 16.dp)
         ) {
-            // Tabs
             PrimaryTabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = surfaceColor,
@@ -69,7 +66,7 @@ fun TableOfContentsSheet(
                     onClick = { selectedTab = 0 },
                     text = {
                         Text(
-                            "Chapters (${chapters.size})",
+                            "Chapters (${tocEntries.size})",
                             fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal,
                             color = if (selectedTab == 0) accentColor else textColor.copy(alpha = 0.7f)
                         )
@@ -91,55 +88,46 @@ fun TableOfContentsSheet(
             Spacer(modifier = Modifier.height(12.dp))
 
             if (selectedTab == 0) {
-                // Chapters list
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    itemsIndexed(chapters) { index, chapter ->
-                        val isCurrent = index == currentChapterIndex
-                        Surface(
-                            color = if (isCurrent) accentColor.copy(alpha = 0.15f) else Color.Transparent,
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onSelectChapter(index)
-                                    onDismiss()
-                                }
-                                .testTag("toc_chapter_item_$index")
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
+                if (tocEntries.isEmpty()) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Text(
+                            text = "No table of contents.",
+                            style = MaterialTheme.typography.bodyMedium.copy(color = textColor.copy(alpha = 0.6f))
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        itemsIndexed(tocEntries) { index, entry ->
+                            val isCurrent = entry.label == currentTocLabel
+                            Surface(
+                                color = if (isCurrent) accentColor.copy(alpha = 0.15f) else Color.Transparent,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        onSelectEntry(entry.href)
+                                        onDismiss()
+                                    }
+                                    .testTag("toc_chapter_item_$index")
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 14.dp)
                                 ) {
                                     Text(
-                                        text = "${index + 1}.",
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isCurrent) accentColor else textColor.copy(alpha = 0.5f),
-                                        fontSize = 14.sp,
-                                        modifier = Modifier.width(32.dp)
-                                    )
-                                    Text(
-                                        text = chapter.title,
+                                        text = entry.label,
                                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                                         color = if (isCurrent) accentColor else textColor,
                                         fontSize = 15.sp,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                if (isCurrent) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = "Current Chapter",
-                                        tint = accentColor,
-                                        modifier = Modifier.size(18.dp)
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
                             }
@@ -147,7 +135,6 @@ fun TableOfContentsSheet(
                     }
                 }
             } else {
-                // Bookmarks & Quotes list
                 if (bookmarks.isEmpty()) {
                     Box(
                         contentAlignment = Alignment.Center,
@@ -156,7 +143,7 @@ fun TableOfContentsSheet(
                             .padding(24.dp)
                     ) {
                         Text(
-                            text = "No bookmarks or quotes yet.\nTap the bookmark icon to save a spot, or select text and tap 'Save Quote'!",
+                            text = "No bookmarks or quotes yet.\nSelect text and tap 'Save Quote' to keep a highlight!",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = textColor.copy(alpha = 0.6f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -169,8 +156,7 @@ fun TableOfContentsSheet(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(bookmarks.size) { idx ->
-                            val bm = bookmarks[idx]
+                        itemsIndexed(bookmarks) { _, bm ->
                             val isQuote = bm.note == "Quote"
                             Surface(
                                 color = accentColor.copy(alpha = 0.08f),
@@ -195,24 +181,13 @@ fun TableOfContentsSheet(
                                             .padding(end = 6.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            if (isQuote) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = accentColor.copy(alpha = 0.15f),
-                                                    modifier = Modifier.padding(end = 6.dp)
-                                                ) {
-                                                    Text(
-                                                        text = "QUOTE",
-                                                        fontSize = 9.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = accentColor,
-                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
+                                        Text(
+                                            text = if (isQuote) "QUOTE" else "BOOKMARK",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = accentColor
+                                        )
+                                        if (bm.chapterTitle.isNotBlank()) {
                                             Text(
                                                 text = bm.chapterTitle,
                                                 fontWeight = FontWeight.Bold,
@@ -221,7 +196,7 @@ fun TableOfContentsSheet(
                                             )
                                         }
                                         Text(
-                                            text = "Sheet ${bm.pageIndex + 1} • ${dateFormat.format(Date(bm.timestamp))}",
+                                            text = dateFormat.format(Date(bm.timestamp)),
                                             fontSize = 11.sp,
                                             color = textColor.copy(alpha = 0.6f)
                                         )
@@ -242,7 +217,7 @@ fun TableOfContentsSheet(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
-                                            contentDescription = if (isQuote) "Delete Quote" else "Delete Bookmark",
+                                            contentDescription = "Delete",
                                             tint = textColor.copy(alpha = 0.4f),
                                             modifier = Modifier.size(18.dp)
                                         )

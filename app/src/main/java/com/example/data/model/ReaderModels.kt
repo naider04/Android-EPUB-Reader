@@ -1,7 +1,5 @@
 package com.example.data.model
 
-import androidx.compose.ui.text.font.FontFamily
-
 enum class ReaderTheme(
     val title: String,
     val backgroundColorHex: Long,
@@ -18,16 +16,20 @@ enum class ReaderTheme(
 }
 
 enum class ReaderFontFamily(val title: String, val fontDisplayName: String) {
-    SERIF("Serif (Classic Book)", "Literata / Serif"),
-    SANS("Sans-Serif (Modern Clean)", "Inter / Sans-serif"),
-    MONOSPACE("Monospace (Terminal)", "Roboto Mono"),
-    CURSIVE("Cursive (Handwritten)", "Casual / Cursive")
+    SERIF("Serif (Classic Book)", "Georgia / Serif"),
+    SANS("Sans-Serif (Modern Clean)", "Helvetica / Sans-serif"),
+    MONOSPACE("Monospace (Terminal)", "Courier New"),
+    CURSIVE("Cursive (Handwritten)", "Segoe Script")
 }
 
-enum class ReaderPageMargin(val title: String, val horizontalPaddingDp: Int) {
-    COMPACT("Compact", 16),
-    NORMAL("Normal", 24),
-    WIDE("Spacious", 36)
+enum class ReaderPageMargin(
+    val title: String,
+    val horizontalPaddingDp: Int,
+    val maxInlineSizePx: Int
+) {
+    COMPACT("Compact", 16, 860),
+    NORMAL("Normal", 24, 720),
+    WIDE("Spacious", 36, 600)
 }
 
 data class ReaderSettings(
@@ -44,95 +46,14 @@ data class ReaderSettings(
 )
 
 /**
- * A run of inline text with optional formatting and an optional link target.
- * [linkTarget] is either a fragment like "#notes1" / "#ch1" (internal EPUB link)
- * or a full http(s) URL (external link).
+ * A text selection reported by the embedded rendering engine.
+ * [selectedText] is the selected run of text, [cfi] is the EPUB CFI locator for
+ * the selection (used to re-highlight and save quotes), and [sentenceContext] is
+ * the surrounding sentence used by the dictionary/Google lookup.
  */
-data class InlineSpan(
-    val text: String,
-    val bold: Boolean = false,
-    val italic: Boolean = false,
-    val underline: Boolean = false,
-    val linkTarget: String? = null
-)
-
-/** Text alignment for a block, derived from the EPUB's own inline/block styles. */
-enum class BlockAlignment { LEFT, CENTER, RIGHT, JUSTIFY }
-
-sealed class PageBlock {
-    data class Title(val text: String, val level: Int = 1) : PageBlock()
-    data class Paragraph(
-        val spans: List<InlineSpan>,
-        val alignment: BlockAlignment = BlockAlignment.JUSTIFY
-    ) : PageBlock() {
-        constructor(text: String) : this(listOf(InlineSpan(text)))
-        constructor(text: String, isItalic: Boolean, isBold: Boolean) :
-            this(listOf(InlineSpan(text, bold = isBold, italic = isItalic)))
-
-        val text: String get() = spans.joinToString("") { it.text }
-        val isItalic: Boolean get() = spans.all { it.italic }
-        val isBold: Boolean get() = spans.all { it.bold }
-    }
-    data class Blockquote(
-        val spans: List<InlineSpan>,
-        val citation: String? = null
-    ) : PageBlock() {
-        constructor(text: String) : this(listOf(InlineSpan(text)))
-
-        val text: String get() = spans.joinToString("") { it.text }
-    }
-    data class ListItem(val spans: List<InlineSpan>, val marker: String = "•", val indentLevel: Int = 1) : PageBlock() {
-        val text: String get() = spans.joinToString("") { it.text }
-    }
-    data class Divider(val style: String = "asterisks") : PageBlock()
-    data class Image(val alt: String, val path: String?, val widthRatio: Float = 1f) : PageBlock()
-}
-
-data class BookPage(
-    val pageIndex: Int,
-    val totalPagesInChapter: Int,
-    val chapterIndex: Int,
-    val chapterTitle: String,
-    val blocks: List<PageBlock>,
-    val characterStartOffset: Int = 0,
-    val characterEndOffset: Int = 0
-)
-
-data class EpubChapter(
-    val id: String,
-    val title: String,
-    val rawHtml: String,
-    val blocks: List<PageBlock>,
-    val fullPlainText: String,
-    val href: String = ""
-)
-
-data class EpubBook(
-    val id: String,
-    val title: String,
-    val author: String,
-    val description: String,
-    val coverResId: Int? = null,
-    val coverFilePath: String? = null,
-    val chapters: List<EpubChapter>,
-    val isAsset: Boolean = false,
-    val fileUriString: String? = null
-)
-
 data class TextSelection(
-    val blockIndex: Int,
     val selectedText: String,
-    val startOffset: Int,
-    val endOffset: Int,
+    val cfi: String = "",
+    val index: Int = 0,
     val sentenceContext: String = ""
 )
-
-data class BookSearchResult(
-    val id: String,
-    val chapterIndex: Int,
-    val chapterTitle: String,
-    val snippet: String,
-    val query: String,
-    val charOffset: Int
-)
-

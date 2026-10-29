@@ -18,6 +18,7 @@ data class BookEntity(
     val currentChapterIndex: Int = 0,
     val currentPageInChapter: Int = 0,
     val currentCharacterOffset: Int = 0,
+    val currentCfi: String = "",
     val progressPercent: Float = 0f,
     val lastReadTimestamp: Long = System.currentTimeMillis()
 )
@@ -31,6 +32,7 @@ data class BookmarkEntity(
     val pageIndex: Int,
     val excerpt: String,
     val note: String = "",
+    val cfi: String = "",
     val timestamp: Long = System.currentTimeMillis()
 )
 

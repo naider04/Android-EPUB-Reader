@@ -3,28 +3,34 @@ package com.example.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkBorder
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.model.ReaderTheme
 import com.example.ui.components.*
 import com.example.ui.viewmodel.ReaderViewModel
 import com.example.util.PronunciationAccent
 import com.example.util.rememberPronunciationPlayer
-import kotlinx.coroutines.launch
 
 @Composable
 fun ReaderScreen(
@@ -34,8 +40,6 @@ fun ReaderScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val density = LocalDensity.current
-    val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val pronunciationPlayer = rememberPronunciationPlayer()
 
@@ -50,292 +54,232 @@ fun ReaderScreen(
         }
     }
 
-    val theme = uiState.settings.themeChoice
+    val theme: ReaderTheme = uiState.settings.themeChoice
     val bgColor = Color(theme.backgroundColorHex)
     val textColor = Color(theme.textColorHex)
+    val accentColor = Color(theme.accentColorHex)
 
-    val pagerState = rememberPagerState(
-        initialPage = 0,
-        pageCount = { uiState.pages.size.coerceAtLeast(1) }
-    )
-
-    // Sync ViewModel page to PagerState (initial load, TOC jump, chapter transition)
-    LaunchedEffect(uiState.currentPageIndex, uiState.pages.size) {
-        if (uiState.pages.isNotEmpty() &&
-            uiState.currentPageIndex in uiState.pages.indices &&
-            pagerState.currentPage != uiState.currentPageIndex
-        ) {
-            pagerState.scrollToPage(uiState.currentPageIndex)
-        }
-    }
-
-    // Sync swipe gesture from PagerState to ViewModel
-    LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.settledPage }.collect { settledPage ->
-            if (uiState.pages.isNotEmpty() &&
-                settledPage in uiState.pages.indices &&
-                settledPage != uiState.currentPageIndex
-            ) {
-                viewModel.onPageChanged(settledPage)
-            }
-        }
-    }
-
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .background(bgColor)
     ) {
-        val widthPx = with(density) { maxWidth.roundToPx() }
-        val heightPx = with(density) {
-            // The pager Column and the page content add their own vertical padding on top of
-            // the box height. We must report the ACTUAL area available to paginate blocks,
-            // otherwise the paginator over-estimates page height and clips the bottom of every
-            // page -- which makes the last line of a page (and the final block of a chapter)
-            // unreachable ("unfinished chapters / missing content").
-            val columnTop = if (uiState.settings.showHeaderFooter) 48.dp else 16.dp
-            val columnBottom = if (uiState.settings.showHeaderFooter) 44.dp else 16.dp
-            val pageContentVertical = 24.dp // PageContent's vertical padding (12 top + 12 bottom)
-            (maxHeight - columnTop - columnBottom - pageContentVertical).roundToPx()
-        }
-
-        LaunchedEffect(widthPx, heightPx, density.density, uiState.settings) {
-            viewModel.onViewportDimensionsChanged(widthPx, heightPx, density.density)
-        }
+        // The foliate-js rendering engine lives in a WebView that fills the screen.
+        ReaderWebView(
+            engine = viewModel.engine,
+            modifier = Modifier.fillMaxSize()
+        )
 
         if (uiState.isLoading) {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.fillMaxSize()
             ) {
-                CircularProgressIndicator(color = Color(theme.accentColorHex))
+                CircularProgressIndicator(color = accentColor)
             }
-        } else {
-            val currentPage = uiState.pages.getOrNull(uiState.currentPageIndex)
+        }
 
-            // Main Reader Canvas
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onTap = {
-                                if (uiState.activeSelection != null) {
-                                    viewModel.clearSelection()
-                                } else {
-                                    viewModel.toggleControls()
-                                }
-                            }
-                        )
-                    }
+        // Minimal always-visible top bar (back button + title).
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .background(bgColor.copy(alpha = 0.85f))
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.testTag("reader_back_button")
             ) {
-                // Paginated Sheets Content
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(
-                            top = if (uiState.settings.showHeaderFooter) 48.dp else 16.dp,
-                            bottom = if (uiState.settings.showHeaderFooter) 44.dp else 16.dp
-                        )
-                ) {
-                    if (uiState.pages.isNotEmpty()) {
-                        HorizontalPager(
-                            state = pagerState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .testTag("reader_horizontal_pager")
-                        ) { pageIdx ->
-                            val page = uiState.pages.getOrNull(pageIdx)
-                            if (page != null) {
-                                PageContent(
-                                    page = page,
-                                    settings = uiState.settings,
-                                    activeSelection = uiState.activeSelection,
-                                    onTextSelected = { selection ->
-                                        viewModel.selectText(selection)
-                                    },
-                                    onLinkClick = { linkTarget ->
-                                        viewModel.handleLink(linkTarget)
-                                    },
-                                    onTap = {
-                                        if (uiState.activeSelection != null) {
-                                            viewModel.clearSelection()
-                                        } else {
-                                            viewModel.toggleControls()
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Minimalist Passive Sheet Header & Footer (when controls are hidden)
-                if (uiState.settings.showHeaderFooter && !uiState.isControlsVisible) {
-                    // Top Chapter indicator
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .statusBarsPadding()
-                            .padding(horizontal = 24.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = currentPage?.chapterTitle ?: uiState.book?.title ?: "",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = textColor.copy(alpha = 0.5f),
-                                fontSize = 11.sp
-                            ),
-                            maxLines = 1
-                        )
-                    }
-
-                    // Bottom Sheet number indicator
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .align(Alignment.BottomCenter)
-                            .navigationBarsPadding()
-                            .padding(horizontal = 24.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Sheet ${uiState.currentPageIndex + 1} of ${uiState.totalPagesInChapter.coerceAtLeast(1)}",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = textColor.copy(alpha = 0.5f),
-                                fontSize = 11.sp
-                            )
-                        )
-                        val totalChapters = uiState.book?.chapters?.size ?: 1
-                        Text(
-                            text = "Ch. ${uiState.currentChapterIndex + 1}/$totalChapters",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                color = textColor.copy(alpha = 0.5f),
-                                fontSize = 11.sp
-                            )
-                        )
-                    }
-                }
-
-                // Interactive Overlays: Top Header & Bottom Bar
-                ReaderHeader(
-                    visible = uiState.isControlsVisible && uiState.activeSelection == null,
-                    bookTitle = uiState.book?.title ?: "EPUB Reader",
-                    chapterTitle = currentPage?.chapterTitle ?: "Chapter",
-                    theme = theme,
-                    isBookmarked = uiState.isCurrentPageBookmarked,
-                    onBackClick = onBack,
-                    onSearchClick = { viewModel.openSearchSheet() },
-                    onBookmarkClick = { viewModel.toggleBookmarkCurrentPage() },
-                    onSettingsClick = { viewModel.toggleSettingsSheet() },
-                    modifier = Modifier.align(Alignment.TopCenter)
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to Library",
+                    tint = textColor
                 )
-
-                ReaderFooter(
-                    visible = uiState.isControlsVisible && uiState.activeSelection == null,
-                    currentPageIndex = uiState.currentPageIndex,
-                    totalPagesInChapter = uiState.totalPagesInChapter,
-                    currentChapterIndex = uiState.currentChapterIndex,
-                    totalChapters = uiState.book?.chapters?.size ?: 1,
-                    theme = theme,
-                    onPreviousPage = { viewModel.prevPage() },
-                    onNextPage = { viewModel.nextPage() },
-                    onPageSliderChange = { newPageIndex -> viewModel.onPageChanged(newPageIndex) },
-                    onTocClick = { viewModel.toggleTocSheet() },
-                    modifier = Modifier.align(Alignment.BottomCenter)
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = uiState.bookTitle,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = textColor,
+                        fontSize = 15.sp
+                    ),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                if (uiState.currentTocLabel.isNotBlank()) {
+                    Text(
+                        text = uiState.currentTocLabel,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            color = textColor.copy(alpha = 0.6f),
+                            fontSize = 11.sp
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(48.dp))
+        }
 
-                // Floating Text Selection Action Toolbar (Dictionary & Pronounce options)
-                TextSelectionToolbar(
-                    selection = uiState.activeSelection,
-                    theme = theme,
-                    onDictionaryClick = { term, sentence ->
-                        viewModel.lookupWord(term, sentence)
-                        pronunciationPlayer.speak(term, PronunciationAccent.US)
-                    },
-                    onPronounceUkClick = { textToSpeak ->
-                        pronunciationPlayer.speak(textToSpeak, PronunciationAccent.UK)
-                    },
-                    onPronounceUsClick = { textToSpeak ->
-                        pronunciationPlayer.speak(textToSpeak, PronunciationAccent.US)
-                    },
-                    onSaveQuoteClick = { quoteText ->
-                        viewModel.saveQuote(quoteText)
-                    },
-                    onDismiss = {
-                        viewModel.clearSelection()
-                    },
+        // Bottom control bar (settings, bookmark, TOC, prev/next) when controls visible.
+        AnimatedVisibility(
+            visible = uiState.isControlsVisible && uiState.activeSelection == null,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            Surface(
+                color = Color(theme.surfaceColorHex).copy(alpha = 0.97f),
+                shadowElevation = 8.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
                         .navigationBarsPadding()
-                        .padding(bottom = 16.dp)
-                )
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    IconButton(
+                        onClick = { viewModel.prevPage() },
+                        modifier = Modifier.testTag("footer_prev_page")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Previous Page",
+                            tint = textColor
+                        )
+                    }
 
-                // Snackbar Host
-                SnackbarHost(
-                    hostState = snackbarHostState,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = if (uiState.activeSelection != null) 140.dp else 64.dp)
-                )
-            }
+                    IconButton(
+                        onClick = { viewModel.toggleBookmark() },
+                        modifier = Modifier.testTag("reader_bookmark_button")
+                    ) {
+                        Icon(
+                            imageVector = if (uiState.isCurrentBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = "Bookmark",
+                            tint = if (uiState.isCurrentBookmarked) accentColor else textColor
+                        )
+                    }
 
-            // Bottom Sheets
-            if (uiState.isSearchSheetVisible) {
-                BookSearchSheet(
-                    query = uiState.searchQuery,
-                    results = uiState.searchResults,
-                    isSearching = uiState.isSearching,
-                    theme = theme,
-                    onQueryChange = { viewModel.updateSearchQuery(it) },
-                    onSearch = { viewModel.searchBook(it) },
-                    onSelectResult = { viewModel.selectSearchResult(it) },
-                    onDismiss = { viewModel.closeSearchSheet() }
-                )
-            }
+                    IconButton(
+                        onClick = { viewModel.toggleTocSheet() },
+                        modifier = Modifier.testTag("footer_chapters_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FormatQuote,
+                            contentDescription = "Contents & Quotes",
+                            tint = textColor
+                        )
+                    }
 
-            if (uiState.isSettingsSheetVisible) {
-                ReaderSettingsSheet(
-                    settings = uiState.settings,
-                    onSettingsChanged = { viewModel.updateSettings(it) },
-                    onDismiss = { viewModel.toggleSettingsSheet() }
-                )
-            }
+                    IconButton(
+                        onClick = { viewModel.toggleSettingsSheet() },
+                        modifier = Modifier.testTag("reader_settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FormatSize,
+                            contentDescription = "Font & Display Settings",
+                            tint = textColor
+                        )
+                    }
 
-            if (uiState.isTocSheetVisible) {
-                TableOfContentsSheet(
-                    chapters = uiState.book?.chapters ?: emptyList(),
-                    currentChapterIndex = uiState.currentChapterIndex,
-                    bookmarks = uiState.bookmarks,
-                    theme = theme,
-                    onSelectChapter = { chapterIndex -> viewModel.goToChapter(chapterIndex) },
-                    onSelectBookmark = { bm -> viewModel.goToChapter(bm.chapterIndex, bm.pageIndex) },
-                    onDeleteBookmark = { bmId ->
-                        coroutineScope.launch {
-                            // Handled in repository via viewModel if needed
-                        }
-                    },
-                    onDismiss = { viewModel.toggleTocSheet() }
-                )
+                    IconButton(
+                        onClick = { viewModel.nextPage() },
+                        modifier = Modifier.testTag("footer_next_page")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "Next Page",
+                            tint = textColor
+                        )
+                    }
+                }
             }
+        }
 
-            if (uiState.isDictionarySheetVisible) {
-                DictionaryBottomSheet(
-                    entry = uiState.selectedDictionaryEntry,
-                    selectedWord = uiState.selectedLookupWord,
-                    isLoading = uiState.isLookingUpWord,
-                    isSavedInVocabulary = uiState.isWordSavedInVocabulary,
-                    theme = theme,
-                    bookId = uiState.book?.id,
-                    contextSnippet = uiState.lookupWordContext,
-                    onSaveToVocabulary = { viewModel.saveCurrentWordToVocabulary() },
-                    onSearchWord = { word -> viewModel.lookupWord(word) },
-                    onDismiss = { viewModel.closeDictionarySheet() }
-                )
-            }
+        // Progress indicator (fraction) shown at the bottom.
+        if (!uiState.isControlsVisible && uiState.fraction > 0f) {
+            Text(
+                text = "${(uiState.fraction * 100).toInt()}%",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    color = textColor.copy(alpha = 0.45f),
+                    fontSize = 11.sp
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp)
+            )
+        }
+
+        // Text selection action toolbar (Google search, dictionary, pronunciation, save quote).
+        TextSelectionToolbar(
+            selection = uiState.activeSelection,
+            theme = theme,
+            onDictionaryClick = { term, sentence ->
+                viewModel.lookupWord(term, sentence)
+                pronunciationPlayer.speak(term, PronunciationAccent.US)
+            },
+            onPronounceUkClick = { text -> pronunciationPlayer.speak(text, PronunciationAccent.UK) },
+            onPronounceUsClick = { text -> pronunciationPlayer.speak(text, PronunciationAccent.US) },
+            onSaveQuoteClick = { viewModel.saveQuote() },
+            onDismiss = { viewModel.clearSelection() },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 16.dp)
+        )
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = if (uiState.activeSelection != null) 140.dp else 64.dp)
+        )
+
+        if (uiState.isSettingsSheetVisible) {
+            ReaderSettingsSheet(
+                settings = uiState.settings,
+                onSettingsChanged = { viewModel.updateSettings(it) },
+                onDismiss = { viewModel.toggleSettingsSheet() }
+            )
+        }
+
+        if (uiState.isTocSheetVisible) {
+            TableOfContentsSheet(
+                tocEntries = uiState.tocEntries,
+                currentTocLabel = uiState.currentTocLabel,
+                bookmarks = uiState.bookmarks,
+                theme = theme,
+                onSelectEntry = { href -> viewModel.goToHref(href) },
+                onSelectBookmark = { bm -> viewModel.selectBookmark(bm) },
+                onDeleteBookmark = { id -> viewModel.deleteBookmark(id) },
+                onDismiss = { viewModel.toggleTocSheet() }
+            )
+        }
+
+        if (uiState.isDictionarySheetVisible) {
+            DictionaryBottomSheet(
+                entry = uiState.selectedDictionaryEntry,
+                selectedWord = uiState.selectedLookupWord,
+                isLoading = uiState.isLookingUpWord,
+                isSavedInVocabulary = uiState.isWordSavedInVocabulary,
+                theme = theme,
+                bookId = uiState.bookId.ifBlank { null },
+                contextSnippet = uiState.lookupWordContext,
+                onSaveToVocabulary = { viewModel.saveCurrentWordToVocabulary() },
+                onSearchWord = { word -> viewModel.lookupWord(word) },
+                onDismiss = { viewModel.closeDictionarySheet() }
+            )
         }
     }
 }
